@@ -1,0 +1,461 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a//dev/null b/styles.css
+index 0000000000000000000000000000000000000000..b0421d1515a3969199ad43440b2750a212fdddb6 100644
+--- a//dev/null
++++ b/styles.css
+@@ -0,0 +1,452 @@
++:root {
++  color-scheme: light dark;
++  --blue: #6cb6ff;
++  --green: #34c759;
++  --yellow: #ffd60a;
++  --red: #ff453a;
++  --surface: rgba(255, 255, 255, 0.82);
++  --surface-dark: rgba(27, 27, 31, 0.82);
++  --text: #111;
++  --text-dark: #f5f5f5;
++  --accent: #2563eb;
++  --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
++  font-family: "SF Pro Rounded", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
++}
++
++* {
++  box-sizing: border-box;
++}
++
++body {
++  margin: 0;
++  min-height: 100vh;
++  background: linear-gradient(160deg, rgba(108, 182, 255, 0.2), rgba(52, 199, 89, 0.15));
++  color: var(--text);
++  font-family: inherit;
++  display: flex;
++  flex-direction: column;
++  gap: 1.5rem;
++  padding: clamp(1.5rem, 4vw, 3rem);
++}
++
++@media (prefers-color-scheme: dark) {
++  body {
++    background: linear-gradient(160deg, rgba(108, 182, 255, 0.15), rgba(52, 199, 89, 0.1));
++    color: var(--text-dark);
++  }
++}
++
++main {
++  display: flex;
++  flex-direction: column;
++  gap: clamp(1.5rem, 3vw, 2.5rem);
++}
++
++.app-header {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  justify-content: space-between;
++  gap: 1rem;
++}
++
++.title-block h1 {
++  margin: 0;
++  font-size: clamp(2.4rem, 5vw, 3.5rem);
++  letter-spacing: -0.03em;
++}
++
++.subtitle {
++  margin: 0.25rem 0 0;
++  font-size: clamp(1rem, 2.5vw, 1.3rem);
++  opacity: 0.85;
++}
++
++.teacher-toggle {
++  background: var(--surface);
++  border: 2px solid rgba(0, 0, 0, 0.12);
++  border-radius: 999px;
++  padding: 0.75rem 1.25rem;
++  font-size: 1.1rem;
++  display: inline-flex;
++  align-items: center;
++  gap: 0.4rem;
++  cursor: pointer;
++  box-shadow: var(--shadow);
++  transition: transform 0.15s ease, box-shadow 0.2s ease;
++}
++
++.teacher-toggle[aria-pressed="true"] {
++  background: var(--accent);
++  color: white;
++  border-color: transparent;
++}
++
++.teacher-toggle:focus-visible,
++.zone-card:focus-visible,
++.table-actions button:focus-visible,
++.modal-actions button:focus-visible {
++  outline: 3px solid rgba(37, 99, 235, 0.7);
++  outline-offset: 2px;
++}
++
++.zones {
++  display: flex;
++  flex-direction: column;
++  gap: 1rem;
++}
++
++.zone-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
++  gap: clamp(1rem, 2vw, 1.5rem);
++}
++
++.zone-card {
++  border: none;
++  border-radius: 24px;
++  padding: 1.75rem 1.25rem;
++  font-size: 1.2rem;
++  text-align: center;
++  background: var(--surface);
++  color: inherit;
++  cursor: pointer;
++  display: flex;
++  flex-direction: column;
++  gap: 0.6rem;
++  align-items: center;
++  justify-content: center;
++  min-height: 140px;
++  box-shadow: var(--shadow);
++  transition: transform 0.15s ease, box-shadow 0.2s ease;
++  border: 4px solid transparent;
++}
++
++.zone-card:active {
++  transform: scale(0.97);
++}
++
++.zone-card[data-zone="blue"] {
++  border-color: var(--blue);
++}
++
++.zone-card[data-zone="green"] {
++  border-color: var(--green);
++}
++
++.zone-card[data-zone="yellow"] {
++  border-color: var(--yellow);
++}
++
++.zone-card[data-zone="red"] {
++  border-color: var(--red);
++}
++
++.zone-card .emoji {
++  font-size: 2.5rem;
++}
++
++.zone-card .label {
++  font-weight: 700;
++}
++
++.zone-card .kid-words {
++  font-size: 1rem;
++  opacity: 0.8;
++}
++
++.summary {
++  background: var(--surface);
++  border-radius: 24px;
++  padding: 1.5rem;
++  box-shadow: var(--shadow);
++}
++
++.summary h2 {
++  margin-top: 0;
++  margin-bottom: 1rem;
++}
++
++.today-counts {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0.75rem;
++  font-size: 1.05rem;
++}
++
++.today-counts .count-chip {
++  padding: 0.5rem 0.75rem;
++  border-radius: 999px;
++  background: rgba(0, 0, 0, 0.08);
++  color: inherit;
++  display: inline-flex;
++  align-items: center;
++  gap: 0.5rem;
++  min-width: 120px;
++  justify-content: center;
++  border: 2px solid transparent;
++  font-weight: 600;
++}
++
++.today-counts .count-chip[data-zone="blue"] {
++  border-color: var(--blue);
++}
++
++.today-counts .count-chip[data-zone="green"] {
++  border-color: var(--green);
++}
++
++.today-counts .count-chip[data-zone="yellow"] {
++  border-color: var(--yellow);
++}
++
++.today-counts .count-chip[data-zone="red"] {
++  border-color: var(--red);
++}
++
++.timeline {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0.5rem;
++  margin-top: 1rem;
++}
++
++.timeline .timeline-chip {
++  padding: 0.35rem 0.65rem;
++  border-radius: 999px;
++  font-size: 0.9rem;
++  display: inline-flex;
++  align-items: center;
++  gap: 0.4rem;
++  border: 2px solid transparent;
++  background: rgba(0, 0, 0, 0.07);
++}
++
++.timeline .timeline-chip[data-zone="blue"] {
++  border-color: var(--blue);
++}
++
++.timeline .timeline-chip[data-zone="green"] {
++  border-color: var(--green);
++}
++
++.timeline .timeline-chip[data-zone="yellow"] {
++  border-color: var(--yellow);
++}
++
++.timeline .timeline-chip[data-zone="red"] {
++  border-color: var(--red);
++}
++
++.teacher-panel {
++  background: var(--surface);
++  border-radius: 24px;
++  padding: 1.5rem;
++  box-shadow: var(--shadow);
++  display: none;
++  flex-direction: column;
++  gap: 1rem;
++}
++
++body.teacher-mode .teacher-panel {
++  display: flex;
++}
++
++.filters {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 1.5rem;
++}
++
++.filters fieldset {
++  border: 2px solid rgba(0, 0, 0, 0.08);
++  border-radius: 16px;
++  padding: 1rem;
++  min-width: 220px;
++}
++
++.filters legend {
++  font-weight: 700;
++  padding: 0 0.25rem;
++}
++
++.filters label {
++  display: flex;
++  gap: 0.5rem;
++  align-items: center;
++  margin-top: 0.35rem;
++  font-size: 0.95rem;
++}
++
++.custom-date {
++  display: none;
++  margin-top: 0.5rem;
++  gap: 0.75rem;
++}
++
++.custom-date label {
++  flex-direction: column;
++  align-items: flex-start;
++}
++
++.custom-date input {
++  width: 180px;
++}
++
++.table-actions {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 0.75rem;
++}
++
++.table-actions button {
++  padding: 0.65rem 1rem;
++  border-radius: 999px;
++  border: none;
++  background: rgba(0, 0, 0, 0.1);
++  font-size: 0.95rem;
++  cursor: pointer;
++}
++
++.table-actions button#clearAll {
++  background: rgba(255, 69, 58, 0.15);
++  color: #d90429;
++  border: 1px solid rgba(255, 69, 58, 0.3);
++}
++
++.table-wrapper {
++  overflow-x: auto;
++}
++
++table {
++  width: 100%;
++  border-collapse: collapse;
++  min-width: 520px;
++}
++
++thead {
++  background: rgba(0, 0, 0, 0.05);
++}
++
++td,
++th {
++  text-align: left;
++  padding: 0.75rem;
++  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
++}
++
++.select-col {
++  width: 48px;
++}
++
++.zone-chip {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.4rem;
++  padding: 0.25rem 0.6rem;
++  border-radius: 999px;
++  font-size: 0.9rem;
++  border: 2px solid transparent;
++}
++
++.zone-chip[data-zone="blue"] {
++  border-color: var(--blue);
++}
++
++.zone-chip[data-zone="green"] {
++  border-color: var(--green);
++}
++
++.zone-chip[data-zone="yellow"] {
++  border-color: var(--yellow);
++}
++
++.zone-chip[data-zone="red"] {
++  border-color: var(--red);
++}
++
++.modal {
++  position: fixed;
++  inset: 0;
++  background: rgba(0, 0, 0, 0.45);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 1.5rem;
++  z-index: 1000;
++}
++
++.modal.hidden {
++  display: none;
++}
++
++.modal-content {
++  background: var(--surface);
++  border-radius: 24px;
++  padding: 1.5rem;
++  width: min(420px, 100%);
++  box-shadow: var(--shadow);
++  display: flex;
++  flex-direction: column;
++  gap: 1rem;
++}
++
++.modal-subtitle {
++  margin: 0;
++  opacity: 0.8;
++}
++
++textarea {
++  width: 100%;
++  border-radius: 16px;
++  border: 1px solid rgba(0, 0, 0, 0.2);
++  padding: 0.75rem;
++  font-size: 1rem;
++  resize: vertical;
++}
++
++.modal-actions {
++  display: flex;
++  gap: 0.75rem;
++  justify-content: flex-end;
++}
++
++.modal-actions .primary {
++  background: var(--accent);
++  color: white;
++  border: none;
++  padding: 0.65rem 1.2rem;
++  border-radius: 999px;
++  font-size: 1rem;
++  cursor: pointer;
++}
++
++.modal-actions .secondary {
++  background: rgba(0, 0, 0, 0.1);
++  border: none;
++  border-radius: 999px;
++  padding: 0.65rem 1.2rem;
++  font-size: 1rem;
++  cursor: pointer;
++}
++
++.sr-only {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  padding: 0;
++  margin: -1px;
++  overflow: hidden;
++  clip: rect(0, 0, 0, 0);
++  border: 0;
++}
++
++@media (max-width: 640px) {
++  body {
++    padding: 1.25rem;
++  }
++
++  .zone-card {
++    min-height: 120px;
++  }
++}
+ 
+EOF
+)
