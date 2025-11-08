@@ -1,493 +1,600 @@
-(function () {
-  const STORAGE_KEY = 'khalZonesLog';
-  const zoneDetails = {
-    blue: { label: 'Blue', description: 'Sad / Tired', emoji: '🟦' },
-    green: { label: 'Green', description: 'Ready to Learn', emoji: '🟩' },
-    yellow: { label: 'Yellow', description: 'Worried / Excited', emoji: '🟨' },
-    red: { label: 'Red', description: 'Angry / Out of Control', emoji: '🟥' }
+const ingredientForm = document.getElementById('ingredientForm');
+const ingredientInput = document.getElementById('ingredientInput');
+const ingredientListEl = document.getElementById('ingredientList');
+const clearIngredientsBtn = document.getElementById('clearIngredients');
+const cameraButton = document.getElementById('cameraButton');
+const cameraInput = document.getElementById('cameraInput');
+const imageStrip = document.getElementById('imageStrip');
+const extraNotes = document.getElementById('extraNotes');
+const includeImagesCheckbox = document.getElementById('includeImages');
+const storePhotosCheckbox = document.getElementById('storePhotos');
+const generateBtn = document.getElementById('generateBtn');
+const generationStatus = document.getElementById('generationStatus');
+const recipeResult = document.getElementById('recipeResult');
+const settingsToggle = document.getElementById('settingsToggle');
+const settingsDialog = document.getElementById('settingsDialog');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const modelSelect = document.getElementById('modelSelect');
+const systemPromptInput = document.getElementById('systemPrompt');
+const saveSettingsBtn = document.getElementById('saveSettings');
+const savedRecipesContainer = document.getElementById('savedRecipes');
+const searchRecipesInput = document.getElementById('searchRecipes');
+const exportRecipesBtn = document.getElementById('exportRecipes');
+const shareLatestBtn = document.getElementById('shareLatest');
+
+const DEFAULT_SYSTEM_PROMPT = `You are Pantry Pro, a friendly culinary assistant.
+- Respond in Markdown.
+- Provide a concise title, yield, prep/cook times, and serving suggestion.
+- Include bullet ingredient list with precise measurements and metric conversions when possible.
+- Number the cooking steps.
+- Add a Chef's Tip section and variation ideas if they fit the prompt.
+- Keep tone encouraging and clear.`;
+
+let ingredients = [];
+let photos = [];
+let recipes = loadRecipes();
+let settings = loadSettings();
+
+applySettingsToUI();
+renderIngredients();
+renderPhotos();
+renderSavedRecipes();
+
+ingredientForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const raw = ingredientInput.value.trim();
+  if (!raw) return;
+  const items = raw.split(',').map((part) => part.trim()).filter(Boolean);
+  ingredients.push(...items);
+  ingredients = Array.from(new Set(ingredients));
+  ingredientInput.value = '';
+  renderIngredients();
+});
+
+clearIngredientsBtn.addEventListener('click', () => {
+  ingredients = [];
+  renderIngredients();
+});
+
+cameraButton.addEventListener('click', () => {
+  cameraInput.click();
+});
+
+cameraInput.addEventListener('change', async (event) => {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  for (const file of files) {
+    const dataUrl = await readFileAsDataURL(file);
+    photos.push({ id: crypto.randomUUID(), dataUrl, name: file.name, addedAt: Date.now() });
+  }
+  cameraInput.value = '';
+  renderPhotos();
+});
+
+generateBtn.addEventListener('click', generateRecipe);
+
+settingsToggle.addEventListener('click', () => {
+  if (typeof settingsDialog.showModal === 'function') {
+    settingsDialog.showModal();
+    settingsToggle.setAttribute('aria-expanded', 'true');
+  } else {
+    alert('Your browser does not support dialog elements.');
+  }
+});
+
+settingsDialog.addEventListener('close', () => {
+  settingsToggle.setAttribute('aria-expanded', 'false');
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+  settings = {
+    apiKey: apiKeyInput.value.trim(),
+    model: modelSelect.value,
+    systemPrompt: systemPromptInput.value.trim() || DEFAULT_SYSTEM_PROMPT,
   };
+  localStorage.setItem('pantrypro:settings', JSON.stringify(settings));
+  settingsDialog.close();
+  toast('Settings saved.');
+});
 
-  const zoneButtons = document.querySelectorAll('.zone-card');
-  const todayCountsEl = document.getElementById('todayCounts');
-  const timelineEl = document.getElementById('timeline');
-  const historyBody = document.getElementById('historyBody');
-  const teacherToggle = document.getElementById('teacherToggle');
-  const teacherPanel = document.getElementById('teacherPanel');
-  const dateFilter = document.getElementById('dateFilter');
-  const customDateInputs = document.getElementById('customDateInputs');
-  const startDateInput = document.getElementById('startDate');
-  const endDateInput = document.getElementById('endDate');
-  const zoneFilterInputs = Array.from(document.querySelectorAll('input[name="zoneFilter"]'));
-  const exportButton = document.getElementById('exportCsv');
-  const deleteSelectedButton = document.getElementById('deleteSelected');
-  const clearAllButton = document.getElementById('clearAll');
-  const noteModal = document.getElementById('noteModal');
-  const noteForm = document.getElementById('noteForm');
-  const noteTextarea = document.getElementById('noteText');
-  const skipNoteButton = document.getElementById('skipNote');
-  const liveRegion = document.getElementById('liveRegion');
-  const appHeader = document.querySelector('.app-header');
-  const mainContent = document.querySelector('main');
-  const backgroundElements = [appHeader, mainContent].filter(Boolean);
-  const focusableSelectors = [
-    'a[href]',
-    'button:not([disabled])',
-    'textarea:not([disabled])',
-    'input:not([disabled])',
-    'select:not([disabled])',
-    '[tabindex]:not([tabindex="-1"])'
-  ].join(',');
+searchRecipesInput.addEventListener('input', () => {
+  renderSavedRecipes(searchRecipesInput.value.trim());
+});
 
-  let entries = loadEntries();
-  let pendingTimestamp = null;
-  let lastFocusedTrigger = null;
-  let focusTrapHandler = null;
-
-  zoneButtons.forEach((button) => {
-    button.addEventListener('click', () => {
-      const zone = button.dataset.zone;
-      const entry = addEntry(zone, '');
-      pendingTimestamp = entry.timestamp;
-      announce(`Logged ${zoneDetails[zone].label} at ${formatLocalTime(entry.timestamp)}.`);
-      lastFocusedTrigger = button;
-      openModal();
-    });
+exportRecipesBtn.addEventListener('click', () => {
+  if (!recipes.length) {
+    toast('No recipes to export yet.');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(recipes, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), {
+    href: url,
+    download: `pantry-pro-recipes-${new Date().toISOString().slice(0, 10)}.json`,
   });
-
-  teacherToggle.addEventListener('click', () => {
-    const isActive = document.body.classList.toggle('teacher-mode');
-    teacherToggle.setAttribute('aria-pressed', String(isActive));
-    teacherToggle.textContent = isActive ? '🙈 Hide Teacher View' : '👩‍🏫 Teacher View';
-    if (isActive) {
-      teacherToggle.setAttribute('aria-expanded', 'true');
-      if (teacherPanel && typeof teacherPanel.focus === 'function') {
-        teacherPanel.focus();
-      }
-    } else {
-      teacherToggle.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  dateFilter.addEventListener('change', () => {
-    const isCustom = dateFilter.value === 'custom';
-    customDateInputs.style.display = isCustom ? 'flex' : 'none';
-    renderHistory();
-  });
-
-  [startDateInput, endDateInput].forEach((input) => {
-    input.addEventListener('change', renderHistory);
-  });
-
-  zoneFilterInputs.forEach((input) => {
-    input.addEventListener('change', renderHistory);
-  });
-
-  exportButton.addEventListener('click', () => {
-    const filtered = getFilteredEntries();
-    if (!filtered.length) {
-      alert('No entries to export for the selected filters.');
-      return;
-    }
-    const csv = buildCsv(filtered);
-    const today = new Date();
-    const filename = `khal-zones-${today.toISOString().slice(0, 10)}.csv`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
+  document.body.appendChild(link);
+  link.click();
+  requestAnimationFrame(() => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   });
+});
 
-  deleteSelectedButton.addEventListener('click', () => {
-    const checkboxes = historyBody.querySelectorAll('input[type="checkbox"][data-timestamp]:checked');
-    const timestamps = Array.from(checkboxes).map((cb) => cb.dataset.timestamp);
-    if (!timestamps.length) {
-      alert('Select at least one entry to delete.');
-      return;
-    }
-    if (!confirm(`Delete ${timestamps.length} selected entr${timestamps.length === 1 ? 'y' : 'ies'}?`)) {
-      return;
-    }
-    deleteEntries(timestamps);
+shareLatestBtn.addEventListener('click', async () => {
+  if (!recipes.length) {
+    toast('Generate and save a recipe first.');
+    return;
+  }
+  const latest = recipes[0];
+  const shareText = formatRecipeForSharing(latest);
+  try {
+    await navigator.clipboard.writeText(shareText);
+    toast('Latest recipe copied to clipboard.');
+  } catch (error) {
+    console.error(error);
+    toast('Could not copy to clipboard. Here is the recipe text in a prompt.');
+    alert(shareText);
+  }
+});
+
+function renderIngredients() {
+  ingredientListEl.innerHTML = '';
+  ingredients.forEach((item) => {
+    const li = document.createElement('li');
+    li.className = 'chip';
+    li.innerHTML = `${escapeHtml(item)} <button type="button" aria-label="Remove ${escapeHtml(item)}">×</button>`;
+    li.querySelector('button').addEventListener('click', () => {
+      ingredients = ingredients.filter((ing) => ing !== item);
+      renderIngredients();
+    });
+    ingredientListEl.appendChild(li);
   });
+  if (!ingredients.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'No ingredients yet. Try "tomatoes", "fresh basil", "parmesan"...';
+    empty.className = 'helper-text';
+    ingredientListEl.appendChild(empty);
+  }
+}
 
-  clearAllButton.addEventListener('click', () => {
-    if (!entries.length) {
-      alert('Nothing to clear!');
-      return;
-    }
-    if (confirm('Clear all saved data? This cannot be undone.')) {
-      clearAll();
-    }
+function renderPhotos() {
+  imageStrip.innerHTML = '';
+  photos.forEach((photo) => {
+    const figure = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = photo.dataUrl;
+    img.alt = photo.name || 'Ingredient photo';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', () => {
+      photos = photos.filter((p) => p.id !== photo.id);
+      renderPhotos();
+    });
+    figure.append(img, removeBtn);
+    imageStrip.appendChild(figure);
   });
+  if (!photos.length) {
+    const helper = document.createElement('p');
+    helper.textContent = 'No ingredient photos yet.';
+    helper.className = 'helper-text';
+    imageStrip.appendChild(helper);
+  }
+}
 
-  noteForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    if (!pendingTimestamp) {
-      closeModal();
-      return;
-    }
-    const note = noteTextarea.value.trim();
-    if (note) {
-      updateEntryNote(pendingTimestamp, note);
-    }
-    closeModal();
-  });
-
-  skipNoteButton.addEventListener('click', () => {
-    closeModal();
-  });
-
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !noteModal.classList.contains('hidden')) {
-      closeModal();
-    }
-  });
-
-  noteModal.addEventListener('click', (event) => {
-    if (event.target === noteModal) {
-      closeModal();
-    }
-  });
-
-  renderAll();
-
-  function loadEntries() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((entry) => entry && entry.timestamp && entry.zone);
-    } catch (error) {
-      console.warn('Could not load entries:', error);
-      return [];
-    }
+async function generateRecipe() {
+  if (!settings.apiKey) {
+    toast('Add your OpenAI API key in Settings first.');
+    settingsDialog.showModal();
+    return;
+  }
+  if (!ingredients.length) {
+    toast('Add at least one ingredient.');
+    return;
   }
 
-  function saveEntries() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-    } catch (error) {
-      console.warn('Could not save entries:', error);
+  const notes = extraNotes.value.trim();
+  generationStatus.textContent = 'Cooking up ideas...';
+  generateBtn.disabled = true;
+
+  try {
+    const userPrompt = buildUserPrompt(notes);
+    const body = buildRequestBody(userPrompt);
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorPayload = await safeJson(response);
+      throw new Error(errorPayload.error?.message || response.statusText);
     }
-  }
 
-  function addEntry(zone, note = '') {
-    const timestamp = new Date().toISOString();
-    const entry = { timestamp, zone, note };
-    entries.push(entry);
-    saveEntries();
-    renderAll();
-    return entry;
-  }
-
-  function updateEntryNote(timestamp, note) {
-    const entry = entries.find((item) => item.timestamp === timestamp);
-    if (entry) {
-      entry.note = note;
-      saveEntries();
-      renderAll();
+    const payload = await response.json();
+    const text = extractTextFromResponse(payload);
+    if (!text) {
+      throw new Error('AI response did not include recipe text.');
     }
+
+    displayGeneratedRecipe(text);
+    generationStatus.textContent = 'Recipe ready!';
+  } catch (error) {
+    console.error(error);
+    generationStatus.textContent = '';
+    toast(`Generation failed: ${error.message}`);
+  } finally {
+    generateBtn.disabled = false;
+  }
+}
+
+function buildUserPrompt(notes) {
+  const ingredientText = ingredients.map((item) => `- ${item}`).join('\n');
+  let prompt = `Here are the ingredients I currently have:\n${ingredientText}\n`;
+  if (notes) {
+    prompt += `\nAdditional notes from the cook: ${notes}\n`;
+  }
+  prompt +=
+    '\nCreate a complete recipe that fits the context. Provide sections for Title, Yield, Prep Time, Cook Time, Ingredients, Steps, Chef\'s Tips, and Suggested Pairings. Use approachable language for home cooks.';
+  return prompt;
+}
+
+function buildRequestBody(userPrompt) {
+  const systemContent = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const messages = [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'input_text',
+          text: systemContent,
+        },
+      ],
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'input_text',
+          text: userPrompt,
+        },
+      ],
+    },
+  ];
+
+  if (includeImagesCheckbox.checked && photos.length) {
+    const userContent = messages[1].content;
+    photos.forEach((photo) => {
+      userContent.push({
+        type: 'input_image',
+        image_url: {
+          url: photo.dataUrl,
+        },
+      });
+    });
   }
 
-  function deleteEntries(timestamps) {
-    entries = entries.filter((entry) => !timestamps.includes(entry.timestamp));
-    saveEntries();
-    renderAll();
-  }
+  return {
+    model: settings.model || 'gpt-4o-mini',
+    input: messages,
+    max_output_tokens: 900,
+  };
+}
 
-  function clearAll() {
-    entries = [];
-    saveEntries();
-    renderAll();
-  }
+function displayGeneratedRecipe(markdown) {
+  const recipe = parseRecipeMarkdown(markdown);
+  recipeResult.classList.remove('hidden');
+  recipeResult.innerHTML = '';
 
-  function renderAll() {
-    renderTodaySummary();
-    renderHistory();
-  }
+  const header = document.createElement('div');
+  header.className = 'recipe-header';
+  const info = document.createElement('div');
+  const title = document.createElement('h3');
+  title.className = 'recipe-title';
+  title.textContent = recipe.title;
+  const meta = document.createElement('p');
+  meta.className = 'recipe-meta';
+  meta.textContent = recipe.meta || 'Fresh from the AI kitchen';
+  info.append(title, meta);
 
-  function renderTodaySummary() {
-    const todayEntries = entries.filter((entry) => isSameDay(new Date(entry.timestamp), new Date()));
-    const counts = {
-      blue: 0,
-      green: 0,
-      yellow: 0,
-      red: 0
+  const actions = document.createElement('div');
+  actions.className = 'recipe-actions';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'primary';
+  saveBtn.type = 'button';
+  saveBtn.textContent = 'Save to recipe box';
+  saveBtn.addEventListener('click', () => {
+    const recipeToSave = {
+      id: crypto.randomUUID(),
+      title: recipe.title,
+      meta: recipe.meta,
+      markdown,
+      html: recipe.bodyHtml,
+      createdAt: Date.now(),
+      ingredientsSnapshot: [...ingredients],
+      notes: extraNotes.value.trim(),
+      photos: storePhotosCheckbox.checked ? [...photos] : [],
     };
-    todayEntries.forEach((entry) => {
-      if (counts[entry.zone] !== undefined) {
-        counts[entry.zone] += 1;
+    recipes = [recipeToSave, ...recipes];
+    persistRecipes();
+    renderSavedRecipes(searchRecipesInput.value.trim());
+    toast('Recipe saved to your library.');
+  });
+  actions.appendChild(saveBtn);
+  header.append(info, actions);
+
+  const body = document.createElement('div');
+  body.className = 'recipe-body';
+  body.innerHTML = recipe.bodyHtml;
+
+  const imageGroup = document.createElement('div');
+  imageGroup.className = 'recipe-images';
+  if (includeImagesCheckbox.checked && photos.length) {
+    photos.forEach((photo) => {
+      const img = document.createElement('img');
+      img.src = photo.dataUrl;
+      img.alt = 'Ingredient photo shared with the AI';
+      imageGroup.appendChild(img);
+    });
+  }
+
+  recipeResult.append(header, body, imageGroup);
+}
+
+function renderSavedRecipes(searchTerm = '') {
+  savedRecipesContainer.innerHTML = '';
+  const normalized = searchTerm.toLowerCase();
+  const filtered = recipes.filter((recipe) => {
+    if (!normalized) return true;
+    return (
+      recipe.title.toLowerCase().includes(normalized) ||
+      recipe.markdown.toLowerCase().includes(normalized) ||
+      recipe.ingredientsSnapshot.some((item) => item.toLowerCase().includes(normalized))
+    );
+  });
+
+  if (!filtered.length) {
+    const empty = document.createElement('p');
+    empty.className = 'helper-text';
+    empty.textContent = recipes.length
+      ? 'No recipes match your search yet.'
+      : 'Your saved recipes will live here. Generate something delicious!';
+    savedRecipesContainer.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach((recipe) => {
+    const template = document.getElementById('recipeTemplate');
+    const card = template.content.firstElementChild.cloneNode(true);
+    card.querySelector('.recipe-title').textContent = recipe.title;
+    card.querySelector('.recipe-meta').textContent = recipe.meta || formatDate(recipe.createdAt);
+    card.querySelector('.recipe-body').innerHTML = recipe.html;
+
+    const actions = card.querySelector('.recipe-actions');
+    const copyBtn = actions.querySelector('.js-copy');
+    const deleteBtn = actions.querySelector('.js-delete');
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(recipe.markdown);
+        toast('Recipe copied to clipboard.');
+      } catch (error) {
+        console.error(error);
+        toast('Unable to copy to clipboard.');
       }
     });
 
-    todayCountsEl.innerHTML = '';
-    Object.keys(counts).forEach((zone) => {
-      const chip = document.createElement('div');
-      chip.className = 'count-chip';
-      chip.dataset.zone = zone;
-      chip.setAttribute('role', 'listitem');
-      chip.innerHTML = `<span>${zoneDetails[zone].emoji}</span><span>${zoneDetails[zone].label}: ${counts[zone]}</span>`;
-      todayCountsEl.appendChild(chip);
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm(`Remove "${recipe.title}" from your cookbook?`)) return;
+      recipes = recipes.filter((item) => item.id !== recipe.id);
+      persistRecipes();
+      renderSavedRecipes(searchRecipesInput.value.trim());
     });
 
-    timelineEl.innerHTML = '';
-    todayEntries
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-      .forEach((entry) => {
-        const chip = document.createElement('div');
-        chip.className = 'timeline-chip';
-        chip.dataset.zone = entry.zone;
-        chip.setAttribute('role', 'listitem');
-        chip.innerHTML = `<span>${zoneDetails[entry.zone].emoji}</span><span>${formatLocalTime(entry.timestamp)}</span>`;
-        timelineEl.appendChild(chip);
+    const imageContainer = card.querySelector('.recipe-images');
+    if (recipe.photos?.length) {
+      recipe.photos.forEach((photo) => {
+        const img = document.createElement('img');
+        img.src = photo.dataUrl;
+        img.alt = 'Saved ingredient photo';
+        imageContainer.appendChild(img);
       });
+    }
+
+    savedRecipesContainer.appendChild(card);
+  });
+}
+
+function loadRecipes() {
+  try {
+    const stored = localStorage.getItem('pantrypro:recipes');
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Failed to parse saved recipes', error);
+    return [];
   }
+}
 
-  function renderHistory() {
-    const filtered = getFilteredEntries();
-    historyBody.innerHTML = '';
+function persistRecipes() {
+  localStorage.setItem('pantrypro:recipes', JSON.stringify(recipes));
+}
 
-    if (!filtered.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 4;
-      cell.textContent = 'No entries yet.';
-      row.appendChild(cell);
-      historyBody.appendChild(row);
+function loadSettings() {
+  try {
+    const stored = localStorage.getItem('pantrypro:settings');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return {
+        apiKey: parsed.apiKey || '',
+        model: parsed.model || 'gpt-4o-mini',
+        systemPrompt: parsed.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse settings', error);
+  }
+  return {
+    apiKey: '',
+    model: 'gpt-4o-mini',
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  };
+}
+
+function applySettingsToUI() {
+  apiKeyInput.value = settings.apiKey || '';
+  modelSelect.value = settings.model || 'gpt-4o-mini';
+  systemPromptInput.value = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+}
+
+function parseRecipeMarkdown(markdown) {
+  const lines = markdown.trim().split(/\r?\n/);
+  let title = 'AI Generated Recipe';
+  let meta = '';
+  const bodyLines = [];
+  let inList = false;
+  let listType = 'ul';
+
+  const flushList = () => {
+    if (inList) {
+      bodyLines.push(`</${listType}>`);
+      inList = false;
+    }
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      bodyLines.push('<p></p>');
       return;
     }
 
-    filtered.forEach((entry) => {
-      const row = document.createElement('tr');
-      const selectCell = document.createElement('td');
-      selectCell.className = 'select-col';
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.dataset.timestamp = entry.timestamp;
-      checkbox.setAttribute('aria-label', `Select entry from ${formatLocalDateTime(entry.timestamp)}`);
-      selectCell.appendChild(checkbox);
-
-      const dateCell = document.createElement('td');
-      dateCell.textContent = formatLocalDateTime(entry.timestamp);
-
-      const zoneCell = document.createElement('td');
-      const chip = document.createElement('span');
-      chip.className = 'zone-chip';
-      chip.dataset.zone = entry.zone;
-      chip.innerHTML = `<span aria-hidden="true">${zoneDetails[entry.zone].emoji}</span><span>${zoneDetails[entry.zone].label}</span>`;
-      zoneCell.appendChild(chip);
-
-      const noteCell = document.createElement('td');
-      noteCell.textContent = entry.note || '—';
-
-      row.appendChild(selectCell);
-      row.appendChild(dateCell);
-      row.appendChild(zoneCell);
-      row.appendChild(noteCell);
-      historyBody.appendChild(row);
-    });
-  }
-
-  function getFilteredEntries() {
-    let filtered = [...entries];
-    filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    const selectedZones = zoneFilterInputs.filter((input) => input.checked).map((input) => input.value);
-    if (selectedZones.length && selectedZones.length < zoneFilterInputs.length) {
-      filtered = filtered.filter((entry) => selectedZones.includes(entry.zone));
-    }
-
-    const now = new Date();
-    if (dateFilter.value === 'today') {
-      filtered = filtered.filter((entry) => isSameDay(new Date(entry.timestamp), now));
-    } else if (dateFilter.value === 'week') {
-      filtered = filtered.filter((entry) => isSameWeek(new Date(entry.timestamp), now));
-    } else if (dateFilter.value === 'custom') {
-      const start = startDateInput.value ? new Date(startDateInput.value) : null;
-      const end = endDateInput.value ? endOfDay(new Date(endDateInput.value)) : null;
-      filtered = filtered.filter((entry) => {
-        const date = new Date(entry.timestamp);
-        if (start && date < start) return false;
-        if (end && date > end) return false;
-        return true;
-      });
-    }
-
-    return filtered;
-  }
-
-  function buildCsv(data) {
-    const header = ['timestamp', 'localDateTime', 'zone', 'note'];
-    const rows = data.map((entry) => [
-      entry.timestamp,
-      escapeCsv(formatLocalDateTime(entry.timestamp)),
-      entry.zone,
-      escapeCsv(entry.note || '')
-    ]);
-    return [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
-  }
-
-  function escapeCsv(value) {
-    if (value.includes('"') || value.includes(',') || value.includes('\n')) {
-      return '"' + value.replace(/"/g, '""') + '"';
-    }
-    return value;
-  }
-
-  function formatLocalTime(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
-  function formatLocalDateTime(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleString([], {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  }
-
-  function isSameDay(a, b) {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
-  }
-
-  function isSameWeek(date, reference) {
-    const startOfWeek = new Date(reference);
-    startOfWeek.setHours(0, 0, 0, 0);
-    const day = startOfWeek.getDay();
-    startOfWeek.setDate(startOfWeek.getDate() - day);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(endOfWeek.getDate() + 7);
-
-    return date >= startOfWeek && date < endOfWeek;
-  }
-
-  function endOfDay(date) {
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
-    return end;
-  }
-
-  function openModal() {
-    if (!lastFocusedTrigger) {
-      const activeElement = document.activeElement;
-      if (activeElement && activeElement !== document.body) {
-        lastFocusedTrigger = activeElement;
-      }
-    }
-    noteModal.classList.remove('hidden');
-    noteModal.setAttribute('aria-hidden', 'false');
-    noteTextarea.value = '';
-    trapFocusInModal();
-    requestAnimationFrame(() => {
-      noteTextarea.focus();
-    });
-  }
-
-  function closeModal() {
-    releaseModalTrap();
-    noteModal.classList.add('hidden');
-    noteModal.setAttribute('aria-hidden', 'true');
-    noteTextarea.value = '';
-    pendingTimestamp = null;
-
-    if (lastFocusedTrigger && document.contains(lastFocusedTrigger)) {
-      lastFocusedTrigger.focus();
-    }
-    lastFocusedTrigger = null;
-  }
-
-  function trapFocusInModal() {
-    togglePageInteractivity(true);
-    if (focusTrapHandler) {
-      noteModal.removeEventListener('keydown', focusTrapHandler);
-    }
-
-    focusTrapHandler = (event) => {
-      if (event.key !== 'Tab') return;
-
-      const focusableElements = getFocusableElements(noteModal);
-      if (!focusableElements.length) {
-        event.preventDefault();
-        if (!noteModal.hasAttribute('tabindex')) {
-          noteModal.setAttribute('tabindex', '-1');
-        }
-        noteModal.focus();
+    const headingMatch = /^#{1,6}\s+(.*)/.exec(trimmed);
+    if (headingMatch) {
+      flushList();
+      const level = headingMatch[0].split(' ')[0].length;
+      const text = escapeHtml(headingMatch[1].trim());
+      if (level <= 2 && title === 'AI Generated Recipe') {
+        title = headingMatch[1].trim();
         return;
       }
+      bodyLines.push(`<h${level}>${text}</h${level}>`);
+      return;
+    }
 
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-      const activeElement = document.activeElement;
+    const bulletMatch = /^[-*]\s+(.*)/.exec(trimmed);
+    if (bulletMatch) {
+      if (!inList || listType !== 'ul') {
+        flushList();
+        bodyLines.push('<ul>');
+        inList = true;
+        listType = 'ul';
+      }
+      bodyLines.push(`<li>${escapeHtml(bulletMatch[1])}</li>`);
+      return;
+    }
 
-      if (event.shiftKey) {
-        if (!noteModal.contains(activeElement) || activeElement === firstElement) {
-          event.preventDefault();
-          lastElement.focus();
+    const numberedMatch = /^(\d+)\.\s+(.*)/.exec(trimmed);
+    if (numberedMatch) {
+      if (!inList || listType !== 'ol') {
+        flushList();
+        bodyLines.push('<ol>');
+        inList = true;
+        listType = 'ol';
+      }
+      bodyLines.push(`<li>${escapeHtml(numberedMatch[2])}</li>`);
+      return;
+    }
+
+    flushList();
+
+    const boldMatch = /\*\*(.+)\*\*/g;
+    const italicMatch = /\*(.+)\*/g;
+    let html = escapeHtml(trimmed)
+      .replace(boldMatch, '<strong>$1</strong>')
+      .replace(italicMatch, '<em>$1</em>');
+
+    if (!meta && /servings|yield|prep|cook/i.test(trimmed)) {
+      meta = trimmed;
+    }
+
+    bodyLines.push(`<p>${html}</p>`);
+  });
+
+  flushList();
+
+  return {
+    title,
+    meta,
+    bodyHtml: bodyLines.join('\n'),
+  };
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function toast(message) {
+  generationStatus.textContent = message;
+  generationStatus.classList.add('active');
+  setTimeout(() => {
+    generationStatus.classList.remove('active');
+  }, 3500);
+}
+
+function extractTextFromResponse(payload) {
+  if (typeof payload.output_text === 'string') {
+    return payload.output_text.trim();
+  }
+  if (Array.isArray(payload.output)) {
+    for (const item of payload.output) {
+      if (item.content) {
+        const textBlock = item.content.find((content) => content.type === 'output_text');
+        if (textBlock?.text) {
+          return textBlock.text.trim();
         }
-      } else if (activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      } else if (!noteModal.contains(activeElement)) {
-        event.preventDefault();
-        firstElement.focus();
       }
-    };
-
-    noteModal.addEventListener('keydown', focusTrapHandler);
-  }
-
-  function releaseModalTrap() {
-    togglePageInteractivity(false);
-    if (focusTrapHandler) {
-      noteModal.removeEventListener('keydown', focusTrapHandler);
-      focusTrapHandler = null;
-    }
-    if (noteModal.hasAttribute('tabindex')) {
-      noteModal.removeAttribute('tabindex');
     }
   }
-
-  function togglePageInteractivity(disableBackground) {
-    backgroundElements.forEach((element) => {
-      if (!element) return;
-      if (disableBackground) {
-        element.setAttribute('aria-hidden', 'true');
-        element.setAttribute('inert', '');
-        element.inert = true;
-      } else {
-        element.removeAttribute('aria-hidden');
-        element.removeAttribute('inert');
-        element.inert = false;
-      }
-    });
+  if (payload.choices?.length) {
+    return payload.choices[0]?.message?.content?.trim();
   }
+  return '';
+}
 
-  function getFocusableElements(container) {
-    return Array.from(container.querySelectorAll(focusableSelectors)).filter((element) => {
-      return !element.hasAttribute('disabled') && element.getAttribute('tabindex') !== '-1';
-    });
+async function safeJson(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    return {};
   }
+}
 
-  function announce(message) {
-    liveRegion.textContent = '';
-    setTimeout(() => {
-      liveRegion.textContent = message;
-    }, 50);
-  }
-})();
- 
+function formatDate(timestamp) {
+  if (!timestamp) return 'Saved recipe';
+  return new Date(timestamp).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function formatRecipeForSharing(recipe) {
+  return `Recipe: ${recipe.title}\nSaved on: ${formatDate(recipe.createdAt)}\n\n${recipe.markdown}`;
+}
