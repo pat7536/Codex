@@ -1,140 +1,178 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a//dev/null b/index.html
-index 0000000000000000000000000000000000000000..8e085ba01aaeb4d5ae96ecae9d9e131ac7edb9a0 100644
---- a//dev/null
-+++ b/index.html
-@@ -0,0 +1,131 @@
-+<!DOCTYPE html>
-+<html lang="en">
-+<head>
-+  <meta charset="UTF-8" />
-+  <meta name="viewport" content="width=device-width, initial-scale=1" />
-+  <title>Khal's Zones</title>
-+  <link rel="stylesheet" href="styles.css" />
-+</head>
-+<body>
-+  <header class="app-header">
-+    <div class="title-block">
-+      <h1>What zone am I in?</h1>
-+      <p class="subtitle">Tap how you feel. Add a note if you want.</p>
-+    </div>
-+    <button id="teacherToggle" class="teacher-toggle" aria-pressed="false" aria-expanded="false" aria-controls="teacherPanel">
-+      👩‍🏫 Teacher View
-+    </button>
-+  </header>
-+
-+  <main>
-+    <section class="zones" aria-labelledby="zonePickerHeading">
-+      <h2 id="zonePickerHeading" class="sr-only">Choose a zone</h2>
-+      <div class="zone-grid">
-+        <button class="zone-card" data-zone="blue" aria-label="Blue zone, sad or tired">
-+          <span class="emoji" aria-hidden="true">🟦</span>
-+          <span class="label">Blue Zone</span>
-+          <span class="kid-words">Sad · Tired · Slow</span>
-+        </button>
-+        <button class="zone-card" data-zone="green" aria-label="Green zone, ready to learn">
-+          <span class="emoji" aria-hidden="true">🟩</span>
-+          <span class="label">Green Zone</span>
-+          <span class="kid-words">Happy · Ready · Calm</span>
-+        </button>
-+        <button class="zone-card" data-zone="yellow" aria-label="Yellow zone, worried or excited">
-+          <span class="emoji" aria-hidden="true">🟨</span>
-+          <span class="label">Yellow Zone</span>
-+          <span class="kid-words">Wiggly · Worried · Silly</span>
-+        </button>
-+        <button class="zone-card" data-zone="red" aria-label="Red zone, angry or out of control">
-+          <span class="emoji" aria-hidden="true">🟥</span>
-+          <span class="label">Red Zone</span>
-+          <span class="kid-words">Mad · Yelling · Out of Control</span>
-+        </button>
-+      </div>
-+    </section>
-+
-+    <section class="summary" aria-labelledby="summaryHeading">
-+      <h2 id="summaryHeading">Today at a glance</h2>
-+      <div id="todayCounts" class="today-counts" role="list" aria-live="polite"></div>
-+      <div id="timeline" class="timeline" aria-label="Today entries timeline" role="list"></div>
-+    </section>
-+
-+    <section id="teacherPanel" class="teacher-panel teacher-only" aria-labelledby="teacherHeading" tabindex="-1">
-+      <div class="teacher-panel-header">
-+        <h2 id="teacherHeading">History &amp; Log</h2>
-+      </div>
-+
-+      <form id="filters" class="filters" aria-label="Filter log entries">
-+        <fieldset>
-+          <legend>Date range</legend>
-+          <label>
-+            <span class="sr-only">Date range</span>
-+            <select id="dateFilter" name="dateFilter">
-+              <option value="today">Today</option>
-+              <option value="week">This week</option>
-+              <option value="all" selected>All time</option>
-+              <option value="custom">Custom range</option>
-+            </select>
-+          </label>
-+          <div class="custom-date" id="customDateInputs">
-+            <label>
-+              Start
-+              <input type="date" id="startDate" name="startDate" />
-+            </label>
-+            <label>
-+              End
-+              <input type="date" id="endDate" name="endDate" />
-+            </label>
-+          </div>
-+        </fieldset>
-+        <fieldset>
-+          <legend>Zones</legend>
-+          <label><input type="checkbox" name="zoneFilter" value="blue" checked /> Blue</label>
-+          <label><input type="checkbox" name="zoneFilter" value="green" checked /> Green</label>
-+          <label><input type="checkbox" name="zoneFilter" value="yellow" checked /> Yellow</label>
-+          <label><input type="checkbox" name="zoneFilter" value="red" checked /> Red</label>
-+        </fieldset>
-+      </form>
-+
-+      <div class="table-actions">
-+        <button id="exportCsv" type="button">⬇️ Export CSV</button>
-+        <button id="deleteSelected" type="button">🗑️ Delete selected</button>
-+        <button id="clearAll" type="button">🚨 Clear all data</button>
-+      </div>
-+
-+      <div class="table-wrapper">
-+        <table aria-describedby="teacherHeading">
-+          <thead>
-+            <tr>
-+              <th scope="col" class="select-col"><span class="sr-only">Select entry</span></th>
-+              <th scope="col">Date &amp; Time</th>
-+              <th scope="col">Zone</th>
-+              <th scope="col">Note</th>
-+            </tr>
-+          </thead>
-+          <tbody id="historyBody"></tbody>
-+        </table>
-+      </div>
-+    </section>
-+  </main>
-+
-+  <div id="noteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
-+    <div class="modal-content">
-+      <h2 id="noteTitle">Add a note?</h2>
-+      <p class="modal-subtitle">Tell us what happened (optional).</p>
-+      <form id="noteForm">
-+        <label for="noteText" class="sr-only">Note</label>
-+        <textarea id="noteText" name="note" rows="3" maxlength="120" placeholder="What happened? (optional)"></textarea>
-+        <div class="modal-actions">
-+          <button type="submit" class="primary">Save note</button>
-+          <button type="button" id="skipNote" class="secondary">Skip</button>
-+        </div>
-+      </form>
-+    </div>
-+  </div>
-+
-+  <div id="liveRegion" class="sr-only" aria-live="polite"></div>
-+
-+  <script src="app.js"></script>
-+</body>
-+</html>
- 
-EOF
-)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PantryPal AI | Smart Recipe Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.PANTRYPAL_FIREBASE_CONFIG = {
+      apiKey: 'YOUR_FIREBASE_API_KEY',
+      authDomain: 'YOUR_FIREBASE_AUTH_DOMAIN',
+      projectId: 'YOUR_FIREBASE_PROJECT_ID',
+      storageBucket: 'YOUR_FIREBASE_STORAGE_BUCKET',
+      messagingSenderId: 'YOUR_FIREBASE_MESSAGING_SENDER_ID',
+      appId: 'YOUR_FIREBASE_APP_ID'
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="account-bar" id="accountPanel" hidden>
+    <div class="account-meta">
+      <span id="authStatus">Connect Google to sync your library.</span>
+      <span id="accountName" hidden></span>
+    </div>
+    <div class="account-actions">
+      <button type="button" id="signInButton" class="ghost">Sign in with Google</button>
+      <button type="button" id="signOutButton" class="ghost" hidden>Sign out</button>
+    </div>
+  </div>
+  <header class="hero">
+    <div class="hero-copy">
+      <span class="badge">PantryPal AI</span>
+      <h1>Discover dinner in seconds</h1>
+      <p>
+        Let our on-device AI dream up delicious dishes, keep your favourite recipes safe,
+        and peek inside your pantry with a quick snap to see what you can cook tonight.
+      </p>
+      <ul class="hero-highlights">
+        <li>✨ AI-assisted recipe ideas tailored to your mood</li>
+        <li>📸 Pantry vision powered by MobileNet</li>
+        <li>☁️ Sign in to sync favourite recipes across devices</li>
+      </ul>
+    </div>
+    <div class="hero-illustration" aria-hidden="true">
+      <div class="pot"></div>
+      <div class="steam steam-one"></div>
+      <div class="steam steam-two"></div>
+      <div class="steam steam-three"></div>
+      <div class="ingredient ingredient-one"></div>
+      <div class="ingredient ingredient-two"></div>
+      <div class="ingredient ingredient-three"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="recipe-generator">
+      <div class="section-heading">
+        <h2>Generate a recipe</h2>
+        <p>Describe what you have or how you're feeling—PantryPal will craft a full recipe.</p>
+      </div>
+      <form id="recipeForm" novalidate>
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Ingredients you have</span>
+            <textarea name="ingredients" id="ingredients" rows="3" placeholder="e.g. chicken thighs, spinach, garlic" spellcheck="false"></textarea>
+          </label>
+          <label class="form-field">
+            <span>Dietary preference</span>
+            <select name="diet" id="diet">
+              <option value="omnivore" selected>Omnivore</option>
+              <option value="vegetarian">Vegetarian</option>
+              <option value="vegan">Vegan</option>
+              <option value="pescatarian">Pescatarian</option>
+              <option value="gluten-free">Gluten free</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Meal type</span>
+            <select name="mealType" id="mealType">
+              <option value="dinner" selected>Dinner</option>
+              <option value="lunch">Lunch</option>
+              <option value="breakfast">Breakfast</option>
+              <option value="snack">Snack</option>
+              <option value="dessert">Dessert</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Cuisine focus</span>
+            <select name="cuisine" id="cuisine">
+              <option value="mediterranean" selected>Mediterranean</option>
+              <option value="asian">Asian-inspired</option>
+              <option value="latin">Latin comfort</option>
+              <option value="middle-eastern">Middle Eastern</option>
+              <option value="nordic">Nordic fresh</option>
+              <option value="southern">Southern kitchen</option>
+              <option value="fusion">Surprise me</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Mood or vibe</span>
+            <input type="text" name="mood" id="mood" placeholder="cozy night in, celebrate, light & bright…" />
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="primary">Generate recipe</button>
+          <button type="button" id="saveRecipe" class="secondary" disabled>Save to library</button>
+        </div>
+      </form>
+      <div id="recipeResult" class="recipe-result" hidden>
+        <h3 id="resultTitle"></h3>
+        <p id="resultDescription" class="lead"></p>
+        <div class="two-column">
+          <section>
+            <h4>Ingredients</h4>
+            <ul id="resultIngredients"></ul>
+          </section>
+          <section>
+            <h4>Steps</h4>
+            <ol id="resultSteps"></ol>
+          </section>
+        </div>
+        <p id="resultTip" class="tip"></p>
+      </div>
+    </section>
+
+    <section class="card" id="pantry-scanner">
+      <div class="section-heading">
+        <h2>Scan your pantry</h2>
+        <p>Snap a quick photo of what you have—PantryPal spots ingredients with MobileNet and sparks ideas.</p>
+      </div>
+      <div class="scanner">
+        <label class="dropzone" for="pantryInput">
+          <input type="file" id="pantryInput" accept="image/*" capture="environment" />
+          <span class="dropzone-instruction">Drop an image here or tap to upload</span>
+        </label>
+        <div class="preview" id="imagePreview" hidden>
+          <img alt="Pantry preview" id="previewImage" />
+        </div>
+        <div class="scanner-actions">
+          <button type="button" id="scanButton" class="primary">Scan pantry</button>
+          <span id="scanStatus" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="scan-output">
+        <div class="recognized" id="recognizedIngredients" hidden></div>
+        <div class="suggestions" id="pantrySuggestions" hidden>
+          <h3>AI recipe ideas</h3>
+          <div id="suggestionList" class="suggestion-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="library">
+      <div class="section-heading">
+        <h2>Your saved recipes</h2>
+        <p id="libraryDescription">Save favourites for weekly planning and sync them when you're signed in.</p>
+      </div>
+      <p id="libraryStatus" class="library-status" role="status" aria-live="polite"></p>
+      <div id="emptyLibrary" class="empty-state">No recipes yet—generate one and save it!</div>
+      <div id="savedRecipes" class="library-list"></div>
+      <button type="button" id="clearLibrary" class="ghost" aria-live="polite">Clear library</button>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>Sign in with Google to sync your PantryPal recipes securely across your devices.</small>
+  </footer>
+</body>
+</html>

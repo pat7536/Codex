@@ -1,60 +1,34 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/README.md b/README.md
-index a0292254c13c1b0d3fdfedf0f57c2819ddbf264a..ea720cf73ac8cea1836844accf6404792a9acc9a 100644
---- a/README.md
-+++ b/README.md
-@@ -1,2 +1,49 @@
--# Codex
--A playground repo for building Khal's Zones of Regulation web app.
-+# Khal Zones Tracker
-+
-+A kid-friendly, offline-ready web app to help Khal identify and log his Zone of Regulation right from an iPad. The entire app is client-side and saves data in the browser using `localStorage`.
-+
-+## Getting started
-+
-+1. Download this project.
-+2. Double-click `index.html` (or open it in any modern desktop/mobile browser). No build step or server is required.
-+
-+## Using the app
-+
-+### Log a zone
-+
-+* Tap one of the large zone cards to instantly log how you are feeling.
-+* An optional note pop-up appears—type a short note and press **Save note**, or choose **Skip** to dismiss it.
-+* Notes can be up to 120 characters and attach to the entry you just logged.
-+
-+### Teacher view
-+
-+* Tap **Teacher View** to reveal the history table, filters, and data tools.
-+* Filters allow you to narrow the history by date range (today, this week, all time, or a custom range) and by zone color.
-+* Use the checkboxes in the table to select entries for deletion.
-+
-+### Export & delete
-+
-+* **Export CSV** downloads the currently filtered log as `khal-zones-YYYY-MM-DD.csv` with columns `timestamp,localDateTime,zone,note`.
-+* **Delete selected** removes the checked entries from the table and storage.
-+* **Clear all data** empties the entire log after confirming. This cannot be undone.
-+
-+## Data storage
-+
-+Entries are saved as a JSON array under the `localStorage` key `khalZonesLog`. Each entry looks like:
-+
-+```json
-+{
-+  "timestamp": "2025-09-26T14:32:10.123Z",
-+  "zone": "green",
-+  "note": "Recess went well"
-+}
-+```
-+
-+Because data lives in the browser, refreshing or reopening the page keeps the log intact. Clearing browser storage or opening the page in a different browser/device starts with a fresh log.
-+
-+## File overview
-+
-+* `index.html` – Single-page layout with zone cards, today summary, and teacher tools.
-+* `styles.css` – Touch-friendly styling, color tokens, dark-mode support, and responsive layout.
-+* `app.js` – Handles storage, logging, filtering, exporting, and accessibility helpers.
-+* `README.md` – This file.
- 
-EOF
-)
+# PantryPal AI
+
+PantryPal AI is a single-page web app that helps you discover what to cook. Generate recipes with a quick prompt, scan pantry photos for ingredient suggestions, and save favourites for later. When you sign in with Google, your saved recipes sync across every device.
+
+## Features
+- **AI-inspired recipes:** Craft detailed dishes from a handful of ingredients, moods, cuisines, or meal types.
+- **Pantry scanning:** Use MobileNet to identify ingredients from a photo and instantly load tailored recipe ideas.
+- **Saved library:** Keep a personal cookbook that works offline with local storage and optionally syncs through Firebase when signed in with Google.
+- **Responsive UI:** Optimised layout for phones, tablets, and desktops with dark-mode support.
+
+## Getting started
+1. Download or clone this repository.
+2. Open `index.html` in any modern desktop or mobile browser. No build step is required.
+
+## Enable Google sign-in sync
+To sync the recipe library across devices you need a Firebase project:
+
+1. Create a Firebase project and register a web app.
+2. Enable the **Google** provider under **Build → Authentication → Sign-in method**.
+3. Enable **Cloud Firestore** (production or test mode works).
+4. Copy your Firebase web app configuration and replace **every** placeholder value inside `index.html` where `window.PANTRYPAL_FIREBASE_CONFIG` is defined. PantryPal keeps the sign-in button disabled while any placeholder value remains so you can spot misconfiguration quickly.
+5. Run the app from an `http://` or `https://` origin—Firebase blocks Google sign-in on `file://` URLs. The quickest path is `npx serve` (or any static file server) from the project folder and then visiting `http://localhost:3000`.
+6. Add each domain you use to open PantryPal (including `localhost` for local testing) under **Authentication → Settings → Authorized domains** so the Google popup or redirect is allowed to load.
+7. Reload the app. The "Sign in with Google" button should now start the sign-in flow and recipes will sync via Firestore. If something still fails, the app now surfaces a helpful error explaining what to fix.
+
+When no Firebase configuration is supplied, PantryPal falls back to storing recipes locally so the experience still works offline.
+
+## Project structure
+- `index.html` – Application markup, hero sections, and Firebase configuration placeholder.
+- `styles.css` – Visual theme, layout, responsive grid, and account bar styling.
+- `app.js` – Recipe generator logic, pantry scanning, local storage, and Firebase authentication/Firestore sync.
+
+## License
+This project is provided as-is for demo purposes.
