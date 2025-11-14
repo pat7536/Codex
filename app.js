@@ -413,7 +413,9 @@
     if (!accountPanel) return;
     accountPanel.hidden = false;
 
-    if (!window.firebase || !window.PANTRYPAL_FIREBASE_CONFIG || !window.PANTRYPAL_FIREBASE_CONFIG.apiKey) {
+    const firebaseConfig = window.PANTRYPAL_FIREBASE_CONFIG;
+
+    if (!window.firebase || !hasValidFirebaseConfig(firebaseConfig)) {
       authStatus.textContent = 'Add your Firebase config to enable Google sync.';
       if (signInButton) {
         signInButton.disabled = true;
@@ -426,7 +428,7 @@
     }
 
     try {
-      firebase.initializeApp(window.PANTRYPAL_FIREBASE_CONFIG);
+      firebase.initializeApp(firebaseConfig);
     } catch (error) {
       if (!/already exists/.test(error.message)) {
         console.error('Failed to initialise Firebase', error);
@@ -560,6 +562,11 @@
       updateLibraryStatus('Google sync is not configured.');
       return;
     }
+
+    if (signInButton) {
+      signInButton.disabled = true;
+      signInButton.textContent = 'Opening Google…';
+    }
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
@@ -574,7 +581,17 @@
         }
       } else if (error.code !== 'auth/cancelled-popup-request') {
         console.error('Google sign-in failed', error);
-        updateLibraryStatus('Sign-in failed. Try again.');
+        const friendlyMessage = getFriendlyAuthError(error);
+        const statusMessage = friendlyMessage || 'Sign-in failed. Try again.';
+        updateLibraryStatus(statusMessage);
+        if (authStatus) {
+          authStatus.textContent = statusMessage;
+        }
+      }
+    } finally {
+      if (signInButton) {
+        signInButton.disabled = false;
+        signInButton.textContent = 'Sign in with Google';
       }
     }
   }
@@ -586,6 +603,36 @@
     } catch (error) {
       console.error('Failed to sign out', error);
       updateLibraryStatus('Sign-out failed. Try again.');
+    }
+  }
+
+  function hasValidFirebaseConfig(config) {
+    if (!config || typeof config !== 'object') return false;
+    const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+    return requiredKeys.every((key) => {
+      const value = config[key];
+      if (typeof value !== 'string' || !value.trim()) return false;
+      const normalised = value.trim().toLowerCase();
+      return !normalised.startsWith('your_firebase_') && !normalised.includes('replace-with');
+    });
+  }
+
+  function getFriendlyAuthError(error) {
+    if (!error || typeof error !== 'object') return '';
+    switch (error.code) {
+      case 'auth/invalid-api-key':
+        return 'Your Firebase API key looks incorrect. Double-check your Firebase config values.';
+      case 'auth/invalid-client-id':
+      case 'auth/invalid-credential':
+        return 'The Google sign-in credentials look misconfigured. Verify your Firebase project settings.';
+      case 'auth/operation-not-allowed':
+        return 'Enable Google sign-in for your Firebase project before trying again.';
+      case 'auth/configuration-not-found':
+        return 'Firebase could not find this project configuration. Confirm your Firebase settings.';
+      case 'auth/unauthorized-domain':
+        return 'Add this site to the Authorized Domains list in your Firebase Authentication settings.';
+      default:
+        return '';
     }
   }
 
