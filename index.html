@@ -34,6 +34,54 @@
     <div class="account-actions">
       <button type="button" id="signInButton" class="ghost">Sign in with Google</button>
       <button type="button" id="signOutButton" class="ghost" hidden>Sign out</button>
+      <button type="button" id="configureFirebase" class="ghost" hidden>Configure Firebase</button>
+    </div>
+  </div>
+  <div class="config-modal" id="firebaseConfigModal" hidden>
+    <div class="config-modal__backdrop" id="firebaseConfigBackdrop"></div>
+    <div class="config-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="firebaseConfigTitle" aria-describedby="firebaseConfigDescription">
+      <form id="firebaseConfigForm" class="config-form">
+        <div class="config-form__header">
+          <h2 id="firebaseConfigTitle">Connect Google sync</h2>
+          <p id="firebaseConfigDescription">Paste your Firebase web app credentials to enable syncing across devices.</p>
+        </div>
+        <div class="config-form__grid">
+          <label class="form-field">
+            <span>API key</span>
+            <input type="text" name="apiKey" id="firebaseApiKey" autocomplete="off" required />
+          </label>
+          <label class="form-field">
+            <span>Auth domain</span>
+            <input type="text" name="authDomain" id="firebaseAuthDomain" autocomplete="off" required />
+          </label>
+          <label class="form-field">
+            <span>Project ID</span>
+            <input type="text" name="projectId" id="firebaseProjectId" autocomplete="off" required />
+          </label>
+          <label class="form-field">
+            <span>App ID</span>
+            <input type="text" name="appId" id="firebaseAppId" autocomplete="off" required />
+          </label>
+          <label class="form-field">
+            <span>Storage bucket (optional)</span>
+            <input type="text" name="storageBucket" id="firebaseStorageBucket" autocomplete="off" />
+          </label>
+          <label class="form-field">
+            <span>Messaging sender ID (optional)</span>
+            <input type="text" name="messagingSenderId" id="firebaseMessagingSenderId" autocomplete="off" />
+          </label>
+          <label class="form-field">
+            <span>Measurement ID (optional)</span>
+            <input type="text" name="measurementId" id="firebaseMeasurementId" autocomplete="off" />
+          </label>
+        </div>
+        <p class="config-form__error" id="firebaseConfigError" role="alert"></p>
+        <div class="config-form__actions">
+          <button type="submit" class="primary">Save config</button>
+          <button type="button" id="firebaseConfigCancel" class="secondary">Cancel</button>
+          <button type="button" id="firebaseConfigClear" class="ghost">Clear saved config</button>
+        </div>
+      </form>
     </div>
   </div>
   <header class="hero">

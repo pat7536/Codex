@@ -18,10 +18,10 @@ To sync the recipe library across devices you need a Firebase project:
 1. Create a Firebase project and register a web app.
 2. Enable the **Google** provider under **Build → Authentication → Sign-in method**.
 3. Enable **Cloud Firestore** (production or test mode works).
-4. Copy your Firebase web app configuration and replace **every** placeholder value inside `index.html` where `window.PANTRYPAL_FIREBASE_CONFIG` is defined. PantryPal keeps the sign-in button disabled while any placeholder value remains so you can spot misconfiguration quickly.
+4. Copy your Firebase web app configuration and either replace **every** placeholder value inside `index.html` where `window.PANTRYPAL_FIREBASE_CONFIG` is defined **or** click the **Configure Firebase** button in the account bar and paste the credentials there. The form stores them in your browser (local storage) so you can keep private keys out of the repository.
 5. Run the app from an `http://` or `https://` origin—Firebase blocks Google sign-in on `file://` URLs. The quickest path is `npx serve` (or any static file server) from the project folder and then visiting `http://localhost:3000`.
 6. Add each domain you use to open PantryPal (including `localhost` for local testing) under **Authentication → Settings → Authorized domains** so the Google popup or redirect is allowed to load.
-7. Reload the app. The "Sign in with Google" button should now start the sign-in flow and recipes will sync via Firestore. If something still fails, the app now surfaces a helpful error explaining what to fix.
+7. Reload the app. The "Sign in with Google" button should now start the sign-in flow and recipes will sync via Firestore. If something still fails, the app surfaces a helpful error explaining what to fix, and you can revisit the **Configure Firebase** dialog to update or clear saved credentials.
 
 When no Firebase configuration is supplied, PantryPal falls back to storing recipes locally so the experience still works offline.
 

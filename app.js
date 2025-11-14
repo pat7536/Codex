@@ -15,6 +15,22 @@
   const accountName = document.getElementById('accountName');
   const signInButton = document.getElementById('signInButton');
   const signOutButton = document.getElementById('signOutButton');
+  const configureFirebaseButton = document.getElementById('configureFirebase');
+  const firebaseConfigModal = document.getElementById('firebaseConfigModal');
+  const firebaseConfigBackdrop = document.getElementById('firebaseConfigBackdrop');
+  const firebaseConfigForm = document.getElementById('firebaseConfigForm');
+  const firebaseConfigError = document.getElementById('firebaseConfigError');
+  const firebaseConfigCancel = document.getElementById('firebaseConfigCancel');
+  const firebaseConfigClear = document.getElementById('firebaseConfigClear');
+  const firebaseConfigInputs = {
+    apiKey: document.getElementById('firebaseApiKey'),
+    authDomain: document.getElementById('firebaseAuthDomain'),
+    projectId: document.getElementById('firebaseProjectId'),
+    appId: document.getElementById('firebaseAppId'),
+    storageBucket: document.getElementById('firebaseStorageBucket'),
+    messagingSenderId: document.getElementById('firebaseMessagingSenderId'),
+    measurementId: document.getElementById('firebaseMeasurementId')
+  };
   const signInDefaultLabel = signInButton?.textContent?.trim() || 'Sign in with Google';
 
   const pantryInput = document.getElementById('pantryInput');
@@ -37,6 +53,9 @@
   let currentObjectUrl = null;
 
   const savedRecipes = [];
+  const FIREBASE_CONFIG_STORAGE_KEY = 'pantryPal.firebaseConfig';
+  const FIREBASE_APP_NAME = 'pantryPalWeb';
+  const inlineFirebaseConfig = normaliseFirebaseConfig(window.PANTRYPAL_FIREBASE_CONFIG || {});
   let firebaseReady = false;
   let currentUser = null;
   let auth = null;
@@ -45,6 +64,9 @@
   let initialRemoteSyncComplete = false;
   let authStatusOverride = null;
   let authStatusOverrideTimer = null;
+  let firebaseAppConfigSignature = '';
+  let firebaseLibraryPollTimer = null;
+  let unsubscribeFromAuthState = null;
 
   setSavedRecipes(loadSavedRecipes());
   setupAuth();
@@ -416,104 +438,398 @@
     if (!accountPanel) return;
     accountPanel.hidden = false;
 
-    const firebaseConfig = window.PANTRYPAL_FIREBASE_CONFIG;
-
-    if (!window.firebase || !hasValidFirebaseConfig(firebaseConfig)) {
-      setAuthStatusOverride('Add your Firebase config to enable Google sync.', { tone: 'warning' });
-      if (signInButton) {
-        signInButton.disabled = true;
-        signInButton.hidden = false;
-        signInButton.textContent = signInDefaultLabel;
-        signInButton.setAttribute('aria-disabled', 'true');
-        signInButton.title = 'Add your Firebase config to enable Google sync.';
-      }
-      if (signOutButton) {
-        signOutButton.hidden = true;
-      }
-      return;
-    }
-
-    try {
-      firebase.initializeApp(firebaseConfig);
-    } catch (error) {
-      if (!/already exists/.test(error.message)) {
-        console.error('Failed to initialise Firebase', error);
-        setAuthStatusOverride('Google sync unavailable right now.', { tone: 'error' });
-        return;
-      }
-    }
-
-    firebaseReady = true;
-    auth = firebase.auth();
-    firestore = firebase.firestore();
-
-    clearAuthStatusOverride();
-    setAuthStatus('Sign in to sync your recipes across devices.', { tone: 'info' });
     if (signInButton) {
-      signInButton.disabled = false;
       signInButton.hidden = false;
+      signInButton.disabled = true;
       signInButton.textContent = signInDefaultLabel;
-      signInButton.removeAttribute('aria-disabled');
-      signInButton.removeAttribute('title');
       signInButton.addEventListener('click', handleSignIn);
     }
     if (signOutButton) {
       signOutButton.hidden = true;
       signOutButton.addEventListener('click', handleSignOut);
     }
+    if (configureFirebaseButton) {
+      configureFirebaseButton.hidden = false;
+      configureFirebaseButton.addEventListener('click', openFirebaseConfigModal);
+    }
+    if (firebaseConfigBackdrop) {
+      firebaseConfigBackdrop.addEventListener('click', closeFirebaseConfigModal);
+    }
+    if (firebaseConfigCancel) {
+      firebaseConfigCancel.addEventListener('click', closeFirebaseConfigModal);
+    }
+    if (firebaseConfigForm) {
+      firebaseConfigForm.addEventListener('submit', handleFirebaseConfigSubmit);
+    }
+    if (firebaseConfigClear) {
+      firebaseConfigClear.addEventListener('click', handleFirebaseConfigClear);
+    }
+    document.addEventListener('keydown', handleConfigModalKeydown);
+    window.addEventListener('storage', handleStorageChange);
 
-    auth.onAuthStateChanged((user) => {
-      currentUser = user;
-      updateLibraryStatus(user ? 'Connected to Google — syncing…' : 'Browsing locally');
+    populateFirebaseConfigForm();
+    updateConfigureButtonLabel();
+    showConfigNeededState();
+    attemptFirebaseBootstrap();
+  }
 
-      if (unsubscribeFromCloud) {
-        unsubscribeFromCloud();
-        unsubscribeFromCloud = null;
+  async function attemptFirebaseBootstrap(options = {}) {
+    const { force = false } = options;
+    if (firebaseReady && !force) {
+      return;
+    }
+
+    const config = resolveFirebaseConfig();
+    if (!window.firebase) {
+      showFirebaseLoadingState();
+      if (!firebaseLibraryPollTimer) {
+        firebaseLibraryPollTimer = setTimeout(() => {
+          firebaseLibraryPollTimer = null;
+          attemptFirebaseBootstrap(options);
+        }, 600);
+      }
+      return;
+    }
+
+    if (!config) {
+      showConfigNeededState();
+      return;
+    }
+
+    await bootstrapFirebaseWithConfig(config, { force });
+  }
+
+  async function bootstrapFirebaseWithConfig(config, options = {}) {
+    const { force = false } = options;
+    const signature = JSON.stringify(config);
+    if (!force && firebaseReady && firebaseAppConfigSignature === signature) {
+      return;
+    }
+
+    try {
+      let app = null;
+      try {
+        app = firebase.app(FIREBASE_APP_NAME);
+        if (force && app && typeof app.delete === 'function' && firebaseAppConfigSignature && firebaseAppConfigSignature !== signature) {
+          await app.delete();
+          app = null;
+        }
+      } catch (lookupError) {
+        app = null;
       }
 
-      if (user) {
-        clearAuthStatusOverride();
-        if (accountName) {
-          accountName.textContent = user.displayName || user.email || 'Signed in';
-          accountName.hidden = false;
+      if (!app) {
+        try {
+          app = firebase.initializeApp(config, FIREBASE_APP_NAME);
+        } catch (initError) {
+          if (/already exists/i.test(initError.message)) {
+            app = firebase.app(FIREBASE_APP_NAME);
+          } else {
+            throw initError;
+          }
         }
-        if (signInButton) {
-          signInButton.hidden = true;
+      }
+
+      auth = firebase.auth(app);
+      firestore = firebase.firestore(app);
+      firebaseReady = true;
+      firebaseAppConfigSignature = signature;
+
+      clearConfigNeededState();
+      clearAuthStatusOverride();
+      if (!currentUser) {
+        setAuthStatus('Sign in to sync your recipes across devices.', { tone: 'info' });
+      }
+      if (signInButton) {
+        signInButton.disabled = false;
+        signInButton.hidden = false;
+        signInButton.textContent = signInDefaultLabel;
+        signInButton.removeAttribute('aria-disabled');
+        signInButton.removeAttribute('title');
+      }
+      if (signOutButton) {
+        signOutButton.hidden = true;
+      }
+      updateConfigureButtonLabel();
+
+      if (unsubscribeFromAuthState) {
+        unsubscribeFromAuthState();
+      }
+      unsubscribeFromAuthState = auth.onAuthStateChanged(handleAuthStateChange);
+    } catch (error) {
+      console.error('Failed to initialise Firebase', error);
+      firebaseReady = false;
+      firebaseAppConfigSignature = '';
+      teardownFirebase();
+      setAuthStatusOverride('Google sync unavailable right now.', { tone: 'error', expiresIn: 10000 });
+      showConfigNeededState();
+    }
+  }
+
+  function handleAuthStateChange(user) {
+    currentUser = user;
+    updateLibraryStatus(user ? 'Connected to Google — syncing…' : 'Browsing locally');
+
+    if (unsubscribeFromCloud) {
+      unsubscribeFromCloud();
+      unsubscribeFromCloud = null;
+    }
+
+    if (user) {
+      clearAuthStatusOverride();
+      if (accountName) {
+        accountName.textContent = user.displayName || user.email || 'Signed in';
+        accountName.hidden = false;
+      }
+      if (signInButton) {
+        signInButton.hidden = true;
+        signInButton.disabled = false;
+        signInButton.textContent = signInDefaultLabel;
+        signInButton.removeAttribute('aria-disabled');
+        signInButton.removeAttribute('title');
+      }
+      if (signOutButton) {
+        signOutButton.hidden = false;
+      }
+      setAuthStatus('Synced with Google', { tone: 'success' });
+      if (libraryDescription) {
+        libraryDescription.textContent = 'Your recipes sync automatically across your signed-in devices.';
+      }
+      initialRemoteSyncComplete = false;
+      subscribeToCloudRecipes(user);
+    } else {
+      if (accountName) {
+        accountName.hidden = true;
+      }
+      if (signInButton) {
+        signInButton.hidden = false;
+        signInButton.textContent = signInDefaultLabel;
+        signInButton.disabled = !firebaseReady;
+        if (!firebaseReady) {
+          signInButton.setAttribute('aria-disabled', 'true');
+          signInButton.title = 'Add your Firebase config to enable Google sync.';
+        } else {
           signInButton.removeAttribute('aria-disabled');
           signInButton.removeAttribute('title');
         }
-        if (signOutButton) {
-          signOutButton.hidden = false;
-        }
-        setAuthStatus('Synced with Google', { tone: 'success' });
-        if (libraryDescription) {
-          libraryDescription.textContent = 'Your recipes sync automatically across your signed-in devices.';
-        }
-        initialRemoteSyncComplete = false;
-        subscribeToCloudRecipes(user);
-      } else {
-        if (accountName) {
-          accountName.hidden = true;
-        }
-        if (signInButton) {
-          signInButton.hidden = false;
-          signInButton.textContent = signInDefaultLabel;
-          signInButton.removeAttribute('aria-disabled');
-          signInButton.removeAttribute('title');
-        }
-        if (signOutButton) {
-          signOutButton.hidden = true;
-        }
-        if (!hasActiveAuthStatusOverride()) {
-          setAuthStatus('Connect Google to sync your library.', { tone: 'muted' });
-        }
-        if (libraryDescription) {
-          libraryDescription.textContent = "Save favourites for weekly planning and sync them when you're signed in.";
-        }
-        setSavedRecipes(loadSavedRecipes());
-        updateLibraryStatus('Browsing locally');
+      }
+      if (signOutButton) {
+        signOutButton.hidden = true;
+      }
+      if (!hasActiveAuthStatusOverride()) {
+        setAuthStatus(firebaseReady ? 'Sign in to sync your recipes across devices.' : 'Connect Google to sync your library.', {
+          tone: firebaseReady ? 'info' : 'muted'
+        });
+      }
+      if (libraryDescription) {
+        libraryDescription.textContent = 'Save favourites for weekly planning and sync them when you sign in.';
+      }
+      setSavedRecipes(loadSavedRecipes());
+      updateLibraryStatus(firebaseReady ? 'Browsing locally' : 'Google sync is not configured.');
+    }
+    updateConfigureButtonLabel();
+  }
+
+  function showFirebaseLoadingState() {
+    if (signInButton) {
+      signInButton.disabled = true;
+      signInButton.hidden = false;
+      signInButton.textContent = 'Loading…';
+      signInButton.setAttribute('aria-disabled', 'true');
+    }
+    if (!hasActiveAuthStatusOverride()) {
+      setAuthStatus('Loading Google sync…', { tone: 'muted' });
+    }
+  }
+
+  function showConfigNeededState() {
+    if (signInButton) {
+      signInButton.disabled = true;
+      signInButton.hidden = false;
+      signInButton.textContent = signInDefaultLabel;
+      signInButton.setAttribute('aria-disabled', 'true');
+      signInButton.title = 'Add your Firebase config to enable Google sync.';
+    }
+    if (signOutButton) {
+      signOutButton.hidden = true;
+    }
+    if (accountName) {
+      accountName.hidden = true;
+    }
+    updateConfigureButtonLabel();
+    if (!hasActiveAuthStatusOverride()) {
+      setAuthStatusOverride('Add your Firebase config to enable Google sync.', { tone: 'warning', expiresIn: 8000 });
+    }
+    updateLibraryStatus('Google sync is not configured.');
+    if (libraryDescription) {
+      libraryDescription.textContent = 'Save favourites for weekly planning and sync them when you add your Firebase project.';
+    }
+  }
+
+  function clearConfigNeededState() {
+    if (signInButton) {
+      signInButton.removeAttribute('aria-disabled');
+      signInButton.removeAttribute('title');
+    }
+    if (configureFirebaseButton) {
+      configureFirebaseButton.disabled = false;
+    }
+  }
+
+  function updateConfigureButtonLabel() {
+    if (!configureFirebaseButton) return;
+    const activeConfig = resolveFirebaseConfig();
+    configureFirebaseButton.hidden = false;
+    configureFirebaseButton.textContent = activeConfig ? 'Update Firebase config' : 'Configure Firebase';
+  }
+
+  function openFirebaseConfigModal() {
+    if (!firebaseConfigModal) return;
+    populateFirebaseConfigForm();
+    firebaseConfigModal.hidden = false;
+    if (firebaseConfigError) {
+      firebaseConfigError.textContent = '';
+    }
+  }
+
+  function closeFirebaseConfigModal() {
+    if (!firebaseConfigModal) return;
+    firebaseConfigModal.hidden = true;
+    if (firebaseConfigError) {
+      firebaseConfigError.textContent = '';
+    }
+  }
+
+  function populateFirebaseConfigForm() {
+    const stored = normaliseFirebaseConfig(loadStoredFirebaseConfig());
+    const source = hasValidFirebaseConfig(stored) ? stored : inlineFirebaseConfig;
+    Object.entries(firebaseConfigInputs).forEach(([key, input]) => {
+      if (!input) return;
+      input.value = source[key] || '';
+    });
+    if (firebaseConfigError) {
+      firebaseConfigError.textContent = '';
+    }
+  }
+
+  function handleFirebaseConfigSubmit(event) {
+    event.preventDefault();
+    if (!firebaseConfigForm) return;
+    const formData = new FormData(firebaseConfigForm);
+    const config = {};
+    Object.keys(firebaseConfigInputs).forEach((key) => {
+      const rawValue = formData.get(key);
+      if (rawValue == null) return;
+      const value = rawValue.toString().trim();
+      if (value) {
+        config[key] = value;
       }
     });
+    const normalised = normaliseFirebaseConfig(config);
+    if (!hasValidFirebaseConfig(normalised)) {
+      if (firebaseConfigError) {
+        firebaseConfigError.textContent = 'Please provide valid Firebase credentials for the required fields.';
+      }
+      return;
+    }
+    saveFirebaseConfig(normalised);
+    updateConfigureButtonLabel();
+    closeFirebaseConfigModal();
+    setAuthStatusOverride('Connecting to Firebase…', { tone: 'info', expiresIn: 5000 });
+    attemptFirebaseBootstrap({ force: true });
+  }
+
+  function handleFirebaseConfigClear(event) {
+    event.preventDefault();
+    if (!confirm('Remove the saved Firebase config? Google sync will be disabled until you add a new one.')) {
+      return;
+    }
+    clearStoredFirebaseConfig();
+    populateFirebaseConfigForm();
+    closeFirebaseConfigModal();
+    setAuthStatusOverride('Firebase config cleared. Add new credentials to re-enable syncing.', {
+      tone: 'warning',
+      expiresIn: 8000
+    });
+    teardownFirebase();
+    updateConfigureButtonLabel();
+    showConfigNeededState();
+    attemptFirebaseBootstrap({ force: true });
+  }
+
+  function handleConfigModalKeydown(event) {
+    if (event.key === 'Escape' && firebaseConfigModal && !firebaseConfigModal.hidden) {
+      closeFirebaseConfigModal();
+    }
+  }
+
+  function handleStorageChange(event) {
+    if (event.key !== FIREBASE_CONFIG_STORAGE_KEY) return;
+    populateFirebaseConfigForm();
+    updateConfigureButtonLabel();
+    attemptFirebaseBootstrap({ force: true });
+  }
+
+  function resolveFirebaseConfig() {
+    const stored = normaliseFirebaseConfig(loadStoredFirebaseConfig());
+    if (hasValidFirebaseConfig(stored)) {
+      return stored;
+    }
+    if (hasValidFirebaseConfig(inlineFirebaseConfig)) {
+      return inlineFirebaseConfig;
+    }
+    return null;
+  }
+
+  function loadStoredFirebaseConfig() {
+    try {
+      const raw = localStorage.getItem(FIREBASE_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return typeof parsed === 'object' && parsed ? parsed : null;
+    } catch (error) {
+      console.warn('Failed to read Firebase config from storage', error);
+      return null;
+    }
+  }
+
+  function saveFirebaseConfig(config) {
+    const payload = normaliseFirebaseConfig(config);
+    try {
+      localStorage.setItem(FIREBASE_CONFIG_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Failed to persist Firebase config', error);
+    }
+    window.PANTRYPAL_FIREBASE_CONFIG = { ...payload };
+  }
+
+  function clearStoredFirebaseConfig() {
+    try {
+      localStorage.removeItem(FIREBASE_CONFIG_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Failed to clear Firebase config from storage', error);
+    }
+    window.PANTRYPAL_FIREBASE_CONFIG = { ...inlineFirebaseConfig };
+    firebaseReady = false;
+    firebaseAppConfigSignature = '';
+  }
+
+  function teardownFirebase() {
+    firebaseReady = false;
+    firebaseAppConfigSignature = '';
+    initialRemoteSyncComplete = false;
+    currentUser = null;
+    if (unsubscribeFromCloud) {
+      unsubscribeFromCloud();
+      unsubscribeFromCloud = null;
+    }
+    if (unsubscribeFromAuthState) {
+      unsubscribeFromAuthState();
+      unsubscribeFromAuthState = null;
+    }
+    auth = null;
+    firestore = null;
+    updateLibraryStatus('Google sync is not configured.');
   }
 
   function subscribeToCloudRecipes(user) {
@@ -696,11 +1012,33 @@
     }
   }
 
+  function normaliseFirebaseConfig(config) {
+    if (!config || typeof config !== 'object') return {};
+    return Object.keys(config).reduce((acc, key) => {
+      const value = config[key];
+      if (value == null) {
+        return acc;
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          acc[key] = trimmed;
+        }
+        return acc;
+      }
+      if (typeof value === 'number') {
+        acc[key] = value.toString();
+      }
+      return acc;
+    }, {});
+  }
+
   function hasValidFirebaseConfig(config) {
-    if (!config || typeof config !== 'object') return false;
+    const cleaned = normaliseFirebaseConfig(config);
+    if (!Object.keys(cleaned).length) return false;
     const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
     return requiredKeys.every((key) => {
-      const value = config[key];
+      const value = cleaned[key];
       if (typeof value !== 'string' || !value.trim()) return false;
       const normalised = value.trim().toLowerCase();
       return !normalised.startsWith('your_firebase_') && !normalised.includes('replace-with');

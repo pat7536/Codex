@@ -90,6 +90,7 @@ body {
   display: flex;
   gap: 0.65rem;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .account-actions .ghost {
@@ -105,6 +106,85 @@ body {
   cursor: not-allowed;
 }
 
+.config-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 5vw, 3rem);
+  z-index: 20;
+}
+
+.config-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 16, 36, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.config-modal__dialog {
+  position: relative;
+  width: min(560px, 100%);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(18, 19, 38, 0.08);
+  box-shadow: 0 24px 60px -35px rgba(20, 16, 64, 0.65);
+  padding: clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.config-form__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.config-form__header h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 3vw, 1.65rem);
+}
+
+.config-form__header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.config-form__grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.config-form__grid .form-field input {
+  width: 100%;
+}
+
+.config-form__error {
+  min-height: 1.2rem;
+  margin: 0;
+  color: #c23636;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.config-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.config-form__actions .ghost {
+  border-color: rgba(18, 19, 38, 0.12);
+  color: var(--text-muted);
+}
+
 @media (max-width: 640px) {
   .account-bar {
     flex-direction: column;
@@ -114,6 +194,31 @@ body {
   .account-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .config-modal {
+    padding: 1.5rem;
+  }
+
+  .config-modal__dialog {
+    border-radius: var(--radius-sm);
+    padding: 1.75rem;
+  }
+
+  .config-form__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .config-form__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .config-form__actions .ghost,
+  .config-form__actions .secondary,
+  .config-form__actions .primary {
+    width: 100%;
+    text-align: center;
   }
 }
 
@@ -160,6 +265,29 @@ body {
   .account-actions .ghost {
     color: var(--primary-dark);
     border-color: rgba(135, 146, 255, 0.4);
+  }
+
+  .config-modal__backdrop {
+    background: rgba(6, 8, 24, 0.55);
+  }
+
+  .config-modal__dialog {
+    background: rgba(24, 27, 33, 0.95);
+    border: 1px solid rgba(135, 146, 255, 0.2);
+    box-shadow: 0 32px 60px -30px rgba(0, 0, 0, 0.65);
+  }
+
+  .config-form__header p {
+    color: var(--text-dark-muted);
+  }
+
+  .config-form__actions .ghost {
+    color: var(--text-dark-muted);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .config-form__error {
+    color: #ff8a8a;
   }
 }
 
