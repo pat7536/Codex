@@ -42,6 +42,8 @@
   let firestore = null;
   let unsubscribeFromCloud = null;
   let initialRemoteSyncComplete = false;
+  let authStatusOverride = null;
+  let authStatusOverrideTimer = null;
 
   setSavedRecipes(loadSavedRecipes());
   setupAuth();
@@ -416,7 +418,7 @@
     const firebaseConfig = window.PANTRYPAL_FIREBASE_CONFIG;
 
     if (!window.firebase || !hasValidFirebaseConfig(firebaseConfig)) {
-      authStatus.textContent = 'Add your Firebase config to enable Google sync.';
+      setAuthStatusOverride('Add your Firebase config to enable Google sync.', { tone: 'warning' });
       if (signInButton) {
         signInButton.disabled = true;
         signInButton.textContent = 'Google sync unavailable';
@@ -432,7 +434,7 @@
     } catch (error) {
       if (!/already exists/.test(error.message)) {
         console.error('Failed to initialise Firebase', error);
-        authStatus.textContent = 'Google sync unavailable right now.';
+        setAuthStatusOverride('Google sync unavailable right now.', { tone: 'error' });
         return;
       }
     }
@@ -441,7 +443,8 @@
     auth = firebase.auth();
     firestore = firebase.firestore();
 
-    authStatus.textContent = 'Sign in to sync your recipes across devices.';
+    clearAuthStatusOverride();
+    setAuthStatus('Sign in to sync your recipes across devices.', { tone: 'info' });
     if (signInButton) {
       signInButton.disabled = false;
       signInButton.hidden = false;
@@ -463,6 +466,7 @@
       }
 
       if (user) {
+        clearAuthStatusOverride();
         if (accountName) {
           accountName.textContent = user.displayName || user.email || 'Signed in';
           accountName.hidden = false;
@@ -473,7 +477,7 @@
         if (signOutButton) {
           signOutButton.hidden = false;
         }
-        authStatus.textContent = 'Synced with Google';
+        setAuthStatus('Synced with Google', { tone: 'success' });
         if (libraryDescription) {
           libraryDescription.textContent = 'Your recipes sync automatically across your signed-in devices.';
         }
@@ -489,7 +493,9 @@
         if (signOutButton) {
           signOutButton.hidden = true;
         }
-        authStatus.textContent = 'Connect Google to sync your library.';
+        if (!hasActiveAuthStatusOverride()) {
+          setAuthStatus('Connect Google to sync your library.', { tone: 'muted' });
+        }
         if (libraryDescription) {
           libraryDescription.textContent = "Save favourites for weekly planning and sync them when you're signed in.";
         }
@@ -563,6 +569,8 @@
       return;
     }
 
+    clearAuthStatusOverride();
+    setAuthStatus('Opening Google sign-in…', { tone: 'info' });
     if (signInButton) {
       signInButton.disabled = true;
       signInButton.textContent = 'Opening Google…';
@@ -578,15 +586,14 @@
         } catch (redirectError) {
           console.error('Google sign-in failed', redirectError);
           updateLibraryStatus('Sign-in was blocked. Try again.');
+          setAuthStatusOverride('Sign-in was blocked. Enable pop-ups and try again.', { tone: 'error', expiresIn: 8000 });
         }
       } else if (error.code !== 'auth/cancelled-popup-request') {
         console.error('Google sign-in failed', error);
         const friendlyMessage = getFriendlyAuthError(error);
         const statusMessage = friendlyMessage || 'Sign-in failed. Try again.';
         updateLibraryStatus(statusMessage);
-        if (authStatus) {
-          authStatus.textContent = statusMessage;
-        }
+        setAuthStatusOverride(statusMessage, { tone: 'error', expiresIn: 10000 });
       }
     } finally {
       if (signInButton) {
@@ -617,6 +624,66 @@
     });
   }
 
+  function setAuthStatus(message, options = {}) {
+    if (!authStatus) return;
+    const { tone } = options;
+    authStatus.textContent = message;
+    if (tone) {
+      authStatus.dataset.tone = tone;
+    } else {
+      delete authStatus.dataset.tone;
+    }
+  }
+
+  function setAuthStatusOverride(message, options = {}) {
+    const { tone, expiresIn = 0 } = options;
+    if (authStatusOverrideTimer) {
+      clearTimeout(authStatusOverrideTimer);
+      authStatusOverrideTimer = null;
+    }
+    const override = {
+      message,
+      tone: tone || '',
+      expiresAt: expiresIn > 0 ? Date.now() + expiresIn : 0
+    };
+    authStatusOverride = override;
+    setAuthStatus(message, { tone });
+    if (override.expiresAt) {
+      const delay = override.expiresAt - Date.now();
+      if (delay > 0) {
+        authStatusOverrideTimer = setTimeout(() => {
+          if (authStatusOverride !== override) return;
+          authStatusOverride = null;
+          authStatusOverrideTimer = null;
+          setAuthStatus(currentUser ? 'Synced with Google' : 'Connect Google to sync your library.', {
+            tone: currentUser ? 'success' : 'muted'
+          });
+        }, delay);
+      }
+    }
+  }
+
+  function clearAuthStatusOverride() {
+    if (authStatusOverrideTimer) {
+      clearTimeout(authStatusOverrideTimer);
+      authStatusOverrideTimer = null;
+    }
+    authStatusOverride = null;
+  }
+
+  function hasActiveAuthStatusOverride() {
+    if (!authStatusOverride) return false;
+    if (authStatusOverride.expiresAt && Date.now() > authStatusOverride.expiresAt) {
+      if (authStatusOverrideTimer) {
+        clearTimeout(authStatusOverrideTimer);
+        authStatusOverrideTimer = null;
+      }
+      authStatusOverride = null;
+      return false;
+    }
+    return true;
+  }
+
   function getFriendlyAuthError(error) {
     if (!error || typeof error !== 'object') return '';
     switch (error.code) {
@@ -631,6 +698,10 @@
         return 'Firebase could not find this project configuration. Confirm your Firebase settings.';
       case 'auth/unauthorized-domain':
         return 'Add this site to the Authorized Domains list in your Firebase Authentication settings.';
+      case 'auth/operation-not-supported-in-this-environment':
+        return 'Google sign-in needs a secure origin. Run the app on https or localhost and try again.';
+      case 'auth/network-request-failed':
+        return 'We couldn’t reach Google. Check your internet connection and try again.';
       default:
         return '';
     }

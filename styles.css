@@ -57,6 +57,30 @@ body {
   color: var(--text-muted);
 }
 
+.account-meta #authStatus {
+  transition: color 0.2s ease;
+}
+
+#authStatus[data-tone='info'] {
+  color: var(--primary);
+}
+
+#authStatus[data-tone='muted'] {
+  color: var(--text-muted);
+}
+
+#authStatus[data-tone='success'] {
+  color: #1a7f53;
+}
+
+#authStatus[data-tone='warning'] {
+  color: #b66200;
+}
+
+#authStatus[data-tone='error'] {
+  color: #c23636;
+}
+
 .account-meta span:last-child {
   font-weight: 600;
   color: var(--text);
@@ -107,6 +131,26 @@ body {
 
   .account-meta {
     color: var(--text-dark-muted);
+  }
+
+  #authStatus[data-tone='info'] {
+    color: var(--primary-dark);
+  }
+
+  #authStatus[data-tone='muted'] {
+    color: var(--text-dark-muted);
+  }
+
+  #authStatus[data-tone='success'] {
+    color: #7fe6ba;
+  }
+
+  #authStatus[data-tone='warning'] {
+    color: #ffb86b;
+  }
+
+  #authStatus[data-tone='error'] {
+    color: #ff8a8a;
   }
 
   .account-meta span:last-child {
