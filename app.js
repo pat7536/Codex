@@ -570,16 +570,46 @@
     }
 
     clearAuthStatusOverride();
-    setAuthStatus('Opening Google sign-in…', { tone: 'info' });
+    const insecureOriginMessage = getInsecureOriginBlockingMessage();
+    if (insecureOriginMessage) {
+      setAuthStatusOverride(insecureOriginMessage, { tone: 'warning', expiresIn: 12000 });
+      updateLibraryStatus('Google sign-in needs a secure origin.');
+      return;
+    }
+
+    const useRedirect = shouldUseRedirectSignIn();
+    setAuthStatus(useRedirect ? 'Redirecting to Google…' : 'Opening Google sign-in…', { tone: 'info' });
     if (signInButton) {
       signInButton.disabled = true;
-      signInButton.textContent = 'Opening Google…';
+      signInButton.textContent = useRedirect ? 'Redirecting…' : 'Opening Google…';
     }
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
+      if (useRedirect) {
+        await auth.signInWithRedirect(provider);
+        return;
+      }
       await auth.signInWithPopup(provider);
     } catch (error) {
+      if (!useRedirect && shouldFallbackToRedirect(error)) {
+        try {
+          setAuthStatus('Redirecting to Google…', { tone: 'info' });
+          if (signInButton) {
+            signInButton.textContent = 'Redirecting…';
+          }
+          await auth.signInWithRedirect(provider);
+          return;
+        } catch (redirectError) {
+          console.error('Google sign-in failed', redirectError);
+          updateLibraryStatus('Redirect sign-in failed. Try again.');
+          setAuthStatusOverride('Redirect sign-in failed. Enable pop-ups and try again.', {
+            tone: 'error',
+            expiresIn: 8000
+          });
+          return;
+        }
+      }
       if (error.code === 'auth/popup-blocked') {
         try {
           await auth.signInWithRedirect(provider);
@@ -601,6 +631,46 @@
         signInButton.textContent = 'Sign in with Google';
       }
     }
+  }
+
+  function getInsecureOriginBlockingMessage() {
+    if (typeof window === 'undefined') return '';
+    const protocol = (window.location && window.location.protocol) || '';
+    if (!protocol) return '';
+    const normalized = protocol.toLowerCase();
+    if (normalized === 'file:') {
+      return 'Google sign-in needs a secure origin. Run the app via http:// or https:// instead of opening the HTML file directly.';
+    }
+    return '';
+  }
+
+  function shouldUseRedirectSignIn() {
+    if (typeof window === 'undefined') return false;
+    const protocol = (window.location && window.location.protocol) || '';
+    const normalizedProtocol = protocol ? protocol.toLowerCase() : '';
+    if (normalizedProtocol && !/^https?:$/.test(normalizedProtocol)) {
+      return true;
+    }
+
+    const ua = (window.navigator && window.navigator.userAgent) || '';
+    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    const isSafari = /safari/i.test(ua) && !/(chrome|crios|fxios|edgios|opr\/)/i.test(ua);
+    const isStandalone = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
+
+    if (isIOS && (isSafari || isStandalone)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function shouldFallbackToRedirect(error) {
+    if (!error || typeof error !== 'object') return false;
+    const fallbackCodes = new Set([
+      'auth/operation-not-supported-in-this-environment',
+      'auth/auth-domain-config-required'
+    ]);
+    return fallbackCodes.has(error.code);
   }
 
   async function handleSignOut() {
@@ -700,6 +770,8 @@
         return 'Add this site to the Authorized Domains list in your Firebase Authentication settings.';
       case 'auth/operation-not-supported-in-this-environment':
         return 'Google sign-in needs a secure origin. Run the app on https or localhost and try again.';
+      case 'auth/auth-domain-config-required':
+        return 'Your Firebase project is missing the auth domain configuration. Update the Firebase config with a valid authDomain.';
       case 'auth/network-request-failed':
         return 'We couldn’t reach Google. Check your internet connection and try again.';
       default:
