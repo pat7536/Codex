@@ -45,36 +45,50 @@
           <h2 id="firebaseConfigTitle">Connect Google sync</h2>
           <p id="firebaseConfigDescription">Paste your Firebase web app credentials to enable syncing across devices.</p>
         </div>
+        <div class="config-form__help" aria-live="polite">
+          <p>Here's where to find the values in the Firebase console:</p>
+          <ol>
+            <li>Open <strong>Project settings → General</strong> and scroll to <strong>Your apps</strong>.</li>
+            <li>Select your web app and copy the <strong>Firebase SDK snippet</strong> (Config).</li>
+            <li>Paste it below to auto-fill the fields, or copy each value manually.</li>
+          </ol>
+        </div>
         <div class="config-form__grid">
+          <label class="form-field form-field--full">
+            <span>Paste config snippet (auto-fill)</span>
+            <textarea name="configSnippet" id="firebaseConfigSnippet" rows="5" placeholder="const firebaseConfig = {\n  apiKey: \"...\",\n  authDomain: \"...firebaseapp.com\",\n  projectId: \"...\",\n  storageBucket: \"...appspot.com\",\n  messagingSenderId: \"...\",\n  appId: \"1:...:web:...\",\n  measurementId: \"G-...\"\n};"></textarea>
+            <small>We'll detect the values and fill the form automatically.</small>
+          </label>
           <label class="form-field">
             <span>API key</span>
-            <input type="text" name="apiKey" id="firebaseApiKey" autocomplete="off" required />
+            <input type="text" name="apiKey" id="firebaseApiKey" autocomplete="off" placeholder="AIza..." required />
           </label>
           <label class="form-field">
             <span>Auth domain</span>
-            <input type="text" name="authDomain" id="firebaseAuthDomain" autocomplete="off" required />
+            <input type="text" name="authDomain" id="firebaseAuthDomain" autocomplete="off" placeholder="your-project.firebaseapp.com" required />
           </label>
           <label class="form-field">
             <span>Project ID</span>
-            <input type="text" name="projectId" id="firebaseProjectId" autocomplete="off" required />
+            <input type="text" name="projectId" id="firebaseProjectId" autocomplete="off" placeholder="your-project" required />
           </label>
           <label class="form-field">
             <span>App ID</span>
-            <input type="text" name="appId" id="firebaseAppId" autocomplete="off" required />
+            <input type="text" name="appId" id="firebaseAppId" autocomplete="off" placeholder="1:1234567890:web:abcdef" required />
           </label>
           <label class="form-field">
             <span>Storage bucket (optional)</span>
-            <input type="text" name="storageBucket" id="firebaseStorageBucket" autocomplete="off" />
+            <input type="text" name="storageBucket" id="firebaseStorageBucket" autocomplete="off" placeholder="your-project.appspot.com" />
           </label>
           <label class="form-field">
             <span>Messaging sender ID (optional)</span>
-            <input type="text" name="messagingSenderId" id="firebaseMessagingSenderId" autocomplete="off" />
+            <input type="text" name="messagingSenderId" id="firebaseMessagingSenderId" autocomplete="off" placeholder="1234567890" />
           </label>
           <label class="form-field">
             <span>Measurement ID (optional)</span>
-            <input type="text" name="measurementId" id="firebaseMeasurementId" autocomplete="off" />
+            <input type="text" name="measurementId" id="firebaseMeasurementId" autocomplete="off" placeholder="G-ABC123XYZ" />
           </label>
         </div>
+        <p class="config-form__status" id="firebaseConfigStatus" role="status" aria-live="polite"></p>
         <p class="config-form__error" id="firebaseConfigError" role="alert"></p>
         <div class="config-form__actions">
           <button type="submit" class="primary">Save config</button>

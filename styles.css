@@ -162,8 +162,53 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
+.config-form__help {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+  background: rgba(18, 19, 38, 0.05);
+  border-radius: var(--radius-md);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.config-form__help p {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.config-form__help ol {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.config-form__grid .form-field--full {
+  grid-column: 1 / -1;
+}
+
 .config-form__grid .form-field input {
   width: 100%;
+}
+
+.config-form__status {
+  min-height: 1.2rem;
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.config-form__status[data-tone='success'] {
+  color: #0b8f55;
+}
+
+.config-form__status[data-tone='warning'] {
+  color: #c6751c;
+}
+
+.config-form__status[data-tone='info'] {
+  color: #4b5dff;
 }
 
 .config-form__error {
@@ -203,6 +248,10 @@ body {
   .config-modal__dialog {
     border-radius: var(--radius-sm);
     padding: 1.75rem;
+  }
+
+  .config-form__help {
+    padding: 0.85rem 1rem;
   }
 
   .config-form__grid {
@@ -509,6 +558,12 @@ main {
   font-size: 0.95rem;
 }
 
+.form-field small {
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .form-field input,
 .form-field textarea,
 .form-field select {
@@ -534,6 +589,15 @@ main {
 }
 
 @media (prefers-color-scheme: dark) {
+  .config-form__help {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted-dark, rgba(232, 236, 255, 0.78));
+  }
+
+  .form-field small {
+    color: var(--text-muted-dark, rgba(232, 236, 255, 0.78));
+  }
+
   .form-field input,
   .form-field textarea,
   .form-field select {

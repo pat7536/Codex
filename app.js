@@ -22,6 +22,8 @@
   const firebaseConfigError = document.getElementById('firebaseConfigError');
   const firebaseConfigCancel = document.getElementById('firebaseConfigCancel');
   const firebaseConfigClear = document.getElementById('firebaseConfigClear');
+  const firebaseConfigSnippet = document.getElementById('firebaseConfigSnippet');
+  const firebaseConfigStatus = document.getElementById('firebaseConfigStatus');
   const firebaseConfigInputs = {
     apiKey: document.getElementById('firebaseApiKey'),
     authDomain: document.getElementById('firebaseAuthDomain'),
@@ -56,6 +58,8 @@
   const FIREBASE_CONFIG_STORAGE_KEY = 'pantryPal.firebaseConfig';
   const FIREBASE_APP_NAME = 'pantryPalWeb';
   const inlineFirebaseConfig = normaliseFirebaseConfig(window.PANTRYPAL_FIREBASE_CONFIG || {});
+  const DEFAULT_CONFIG_STATUS_MESSAGE =
+    'Paste the config snippet from Firebase to auto-fill the form, or enter the values manually.';
   let firebaseReady = false;
   let currentUser = null;
   let auth = null;
@@ -67,6 +71,7 @@
   let firebaseAppConfigSignature = '';
   let firebaseLibraryPollTimer = null;
   let unsubscribeFromAuthState = null;
+  let firebaseConfigSnippetParseTimer = null;
 
   setSavedRecipes(loadSavedRecipes());
   setupAuth();
@@ -464,6 +469,9 @@
     if (firebaseConfigClear) {
       firebaseConfigClear.addEventListener('click', handleFirebaseConfigClear);
     }
+    if (firebaseConfigSnippet) {
+      firebaseConfigSnippet.addEventListener('input', handleFirebaseConfigSnippetInput);
+    }
     document.addEventListener('keydown', handleConfigModalKeydown);
     window.addEventListener('storage', handleStorageChange);
 
@@ -703,10 +711,16 @@
   function populateFirebaseConfigForm() {
     const stored = normaliseFirebaseConfig(loadStoredFirebaseConfig());
     const source = hasValidFirebaseConfig(stored) ? stored : inlineFirebaseConfig;
-    Object.entries(firebaseConfigInputs).forEach(([key, input]) => {
-      if (!input) return;
-      input.value = source[key] || '';
-    });
+    writeFirebaseConfigToInputs(source);
+    if (firebaseConfigSnippet) {
+      firebaseConfigSnippet.value = '';
+    }
+    if (firebaseConfigSnippetParseTimer) {
+      clearTimeout(firebaseConfigSnippetParseTimer);
+      firebaseConfigSnippetParseTimer = null;
+    }
+    const statusMessage = determineFirebaseConfigStatusMessage(stored);
+    setFirebaseConfigStatus(statusMessage, { tone: 'info' });
     if (firebaseConfigError) {
       firebaseConfigError.textContent = '';
     }
@@ -739,6 +753,50 @@
     attemptFirebaseBootstrap({ force: true });
   }
 
+  function handleFirebaseConfigSnippetInput(event) {
+    if (!firebaseConfigSnippet) return;
+    const value = event?.target?.value ?? '';
+    if (firebaseConfigSnippetParseTimer) {
+      clearTimeout(firebaseConfigSnippetParseTimer);
+    }
+    firebaseConfigSnippetParseTimer = setTimeout(() => {
+      firebaseConfigSnippetParseTimer = null;
+      processFirebaseConfigSnippet(value);
+    }, 220);
+  }
+
+  function processFirebaseConfigSnippet(rawValue) {
+    const trimmed = typeof rawValue === 'string' ? rawValue.trim() : '';
+    if (!trimmed) {
+      setFirebaseConfigStatus(determineFirebaseConfigStatusMessage(), { tone: 'info' });
+      return;
+    }
+
+    const looksComplete = /}\s*;?\s*$/.test(trimmed);
+    const extracted = extractFirebaseConfigFromSnippet(trimmed);
+    const normalised = normaliseFirebaseConfig(extracted);
+
+    if (Object.keys(normalised).length) {
+      writeFirebaseConfigToInputs(normalised, { partial: true });
+      setFirebaseConfigStatus('Detected Firebase config! Review the values and choose "Save config".', {
+        tone: 'success'
+      });
+      if (firebaseConfigError) {
+        firebaseConfigError.textContent = '';
+      }
+      return;
+    }
+
+    if (looksComplete) {
+      setFirebaseConfigStatus(
+        "We couldn't read a config from that snippet. Copy the Config code block from Firebase → Project settings → General.",
+        { tone: 'warning' }
+      );
+    } else {
+      setFirebaseConfigStatus('Keep pasting the full config snippet to auto-fill the fields.', { tone: 'info' });
+    }
+  }
+
   function handleFirebaseConfigClear(event) {
     event.preventDefault();
     if (!confirm('Remove the saved Firebase config? Google sync will be disabled until you add a new one.')) {
@@ -768,6 +826,82 @@
     populateFirebaseConfigForm();
     updateConfigureButtonLabel();
     attemptFirebaseBootstrap({ force: true });
+  }
+
+  function extractFirebaseConfigFromSnippet(snippet) {
+    if (!snippet || typeof snippet !== 'string') return null;
+    let candidate = snippet.trim();
+    if (!candidate) return null;
+
+    candidate = candidate
+      .replace(/[“”]/g, '"')
+      .replace(/^[;\s]+/, '')
+      .replace(/^(export\s+)?(const|let|var)\s+[^=]+=/i, '')
+      .trim();
+
+    const objectMatch = candidate.match(/\{[\s\S]*\}/m);
+    if (objectMatch) {
+      candidate = objectMatch[0];
+    }
+
+    candidate = candidate.trim();
+    if (!candidate.startsWith('{') || !candidate.endsWith('}')) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(candidate);
+    } catch (jsonError) {
+      try {
+        // eslint-disable-next-line no-new-func
+        return new Function(`return (${candidate});`)();
+      } catch (evalError) {
+        console.warn('Unable to parse Firebase config snippet', evalError);
+        return null;
+      }
+    }
+  }
+
+  function writeFirebaseConfigToInputs(config, options = {}) {
+    const { partial = false } = options;
+    const payload = config && typeof config === 'object' ? config : {};
+    Object.entries(firebaseConfigInputs).forEach(([key, input]) => {
+      if (!input) return;
+      if (partial) {
+        const value = payload[key];
+        if (typeof value === 'string' && value.trim()) {
+          input.value = value.trim();
+        }
+        return;
+      }
+      input.value = payload[key] || '';
+    });
+  }
+
+  function determineFirebaseConfigStatusMessage(storedConfig = null) {
+    const cleanedStored =
+      storedConfig && typeof storedConfig === 'object'
+        ? normaliseFirebaseConfig(storedConfig)
+        : normaliseFirebaseConfig(loadStoredFirebaseConfig());
+    const hasSavedConfig = hasValidFirebaseConfig(cleanedStored) || hasValidFirebaseConfig(inlineFirebaseConfig);
+    return hasSavedConfig
+      ? 'Update your Firebase credentials below or paste a new config snippet to replace them.'
+      : DEFAULT_CONFIG_STATUS_MESSAGE;
+  }
+
+  function setFirebaseConfigStatus(message, options = {}) {
+    if (!firebaseConfigStatus) return;
+    const text = typeof message === 'string' ? message : '';
+    const tone = options?.tone;
+    firebaseConfigStatus.textContent = text;
+    if (text && tone) {
+      firebaseConfigStatus.dataset.tone = tone;
+    } else if (!text || !tone) {
+      delete firebaseConfigStatus.dataset.tone;
+      if (text && !tone) {
+        firebaseConfigStatus.dataset.tone = 'info';
+      }
+    }
   }
 
   function resolveFirebaseConfig() {
