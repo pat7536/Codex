@@ -644,11 +644,11 @@
 
   function showConfigNeededState() {
     if (signInButton) {
-      signInButton.disabled = true;
+      signInButton.disabled = false;
       signInButton.hidden = false;
       signInButton.textContent = signInDefaultLabel;
-      signInButton.setAttribute('aria-disabled', 'true');
       signInButton.title = 'Add your Firebase config to enable Google sync.';
+      signInButton.setAttribute('data-needs-config', 'true');
     }
     if (signOutButton) {
       signOutButton.hidden = true;
@@ -668,8 +668,8 @@
 
   function clearConfigNeededState() {
     if (signInButton) {
-      signInButton.removeAttribute('aria-disabled');
       signInButton.removeAttribute('title');
+      signInButton.removeAttribute('data-needs-config');
     }
     if (configureFirebaseButton) {
       configureFirebaseButton.disabled = false;
@@ -893,6 +893,15 @@
   async function handleSignIn() {
     if (!firebaseReady || !auth) {
       updateLibraryStatus('Google sync is not configured.');
+      if (!hasActiveAuthStatusOverride()) {
+        setAuthStatusOverride('Add your Firebase config to enable Google sync.', { tone: 'warning', expiresIn: 8000 });
+      }
+      if (signInButton) {
+        signInButton.setAttribute('data-needs-config', 'true');
+      }
+      if (firebaseConfigModal && firebaseConfigModal.hidden) {
+        openFirebaseConfigModal();
+      }
       return;
     }
 
