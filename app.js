@@ -73,6 +73,28 @@
   let unsubscribeFromAuthState = null;
   let firebaseConfigSnippetParseTimer = null;
 
+  const firebaseDebug = (message, details) => {
+    const prefix = '[PantryPal][Firebase]';
+    if (typeof details === 'undefined') {
+      console.info(prefix, message);
+      return;
+    }
+    console.info(prefix, message, details);
+  };
+
+  const describeFirebaseConfig = (config) => {
+    if (!config || typeof config !== 'object') {
+      return { hasConfig: false };
+    }
+    const summary = { hasConfig: true };
+    Object.entries(config).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        summary[key] = `${value.length} chars`;
+      }
+    });
+    return summary;
+  };
+
   setSavedRecipes(loadSavedRecipes());
   setupAuth();
 
@@ -488,6 +510,10 @@
     }
 
     const config = resolveFirebaseConfig();
+    firebaseDebug('Bootstrap requested', {
+      firebaseGlobalAvailable: Boolean(window.firebase),
+      configSummary: describeFirebaseConfig(config)
+    });
     if (!window.firebase) {
       showFirebaseLoadingState();
       if (!firebaseLibraryPollTimer) {
@@ -528,18 +554,28 @@
 
       if (!app) {
         try {
+          firebaseDebug('Initializing Firebase app', {
+            appName: FIREBASE_APP_NAME,
+            configSummary: describeFirebaseConfig(config)
+          });
           app = firebase.initializeApp(config, FIREBASE_APP_NAME);
+          firebaseDebug('Firebase app initialised', { appName: app?.name });
         } catch (initError) {
           if (/already exists/i.test(initError.message)) {
             app = firebase.app(FIREBASE_APP_NAME);
+            firebaseDebug('Reusing existing Firebase app instance', { appName: app?.name });
           } else {
             throw initError;
           }
         }
       }
 
+      firebaseDebug('Enabling Firebase Auth service', { appName: app?.name });
       auth = firebase.auth(app);
+      firebaseDebug('Firebase Auth available', { hasAuth: Boolean(auth) });
+      firebaseDebug('Enabling Firestore service', { appName: app?.name });
       firestore = firebase.firestore(app);
+      firebaseDebug('Firestore available', { hasFirestore: Boolean(firestore) });
       firebaseReady = true;
       firebaseAppConfigSignature = signature;
 
@@ -568,9 +604,13 @@
       console.error('Failed to initialise Firebase', error);
       firebaseReady = false;
       firebaseAppConfigSignature = '';
-      teardownFirebase();
+      teardownFirebase({ statusMessage: 'Google sync unavailable right now.' });
       setAuthStatusOverride('Google sync unavailable right now.', { tone: 'error', expiresIn: 10000 });
-      showConfigNeededState();
+      if (!hasValidFirebaseConfig(config)) {
+        showConfigNeededState();
+      } else {
+        firebaseDebug('Skipping config prompt because stored credentials look valid.');
+      }
     }
   }
 
@@ -907,11 +947,14 @@
   function resolveFirebaseConfig() {
     const stored = normaliseFirebaseConfig(loadStoredFirebaseConfig());
     if (hasValidFirebaseConfig(stored)) {
+      firebaseDebug('Resolved Firebase config from storage', describeFirebaseConfig(stored));
       return stored;
     }
     if (hasValidFirebaseConfig(inlineFirebaseConfig)) {
+      firebaseDebug('Resolved Firebase config from inline snippet', describeFirebaseConfig(inlineFirebaseConfig));
       return inlineFirebaseConfig;
     }
+    firebaseDebug('No Firebase config available.');
     return null;
   }
 
@@ -948,7 +991,7 @@
     firebaseAppConfigSignature = '';
   }
 
-  function teardownFirebase() {
+  function teardownFirebase(options = {}) {
     firebaseReady = false;
     firebaseAppConfigSignature = '';
     initialRemoteSyncComplete = false;
@@ -963,7 +1006,8 @@
     }
     auth = null;
     firestore = null;
-    updateLibraryStatus('Google sync is not configured.');
+    const statusMessage = options?.statusMessage || 'Google sync is not configured.';
+    updateLibraryStatus(statusMessage);
   }
 
   function subscribeToCloudRecipes(user) {
